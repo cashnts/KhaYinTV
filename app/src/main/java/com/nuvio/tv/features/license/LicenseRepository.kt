@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -136,11 +137,11 @@ object LicenseRepository {
         return "$base/rest/v1"
     }
 
-    suspend fun activate(rawKey: String): Result<LicenseInfo> {
+    suspend fun activate(rawKey: String): Result<LicenseInfo> = withContext(Dispatchers.IO) {
         val key = rawKey.trim().uppercase()
         if (key.isBlank()) {
             _error.value = "Please enter a valid license key"
-            return Result.failure(IllegalArgumentException(_error.value))
+            return@withContext Result.failure(IllegalArgumentException(_error.value))
         }
 
         _error.value = null
@@ -149,7 +150,7 @@ object LicenseRepository {
         val activationNonce = KhaYinSecurityBridge.generateNonce()
         val apiKey = BuildConfig.SUPABASE_ANON_KEY
 
-        return runCatching {
+        runCatching {
             // First attempt: call Postgres activate_license RPC
             val rpcPayloadMap = mapOf(
                 "p_key" to key,
@@ -249,8 +250,8 @@ object LicenseRepository {
         }
     }
 
-    suspend fun verifyRemoteLicense() {
-        val currentInfo = (_state.value as? LicenseState.Active)?.info ?: return
+    suspend fun verifyRemoteLicense(): Unit = withContext(Dispatchers.IO) {
+        val currentInfo = (_state.value as? LicenseState.Active)?.info ?: return@withContext
         try {
             val restUrl = supabaseRestUrl()
             val key = currentInfo.key

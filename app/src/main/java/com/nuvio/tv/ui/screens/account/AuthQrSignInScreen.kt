@@ -395,30 +395,11 @@ private fun AuthQrLoginPane(
             )
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (!isSignedIn) {
-                Button(
-                    onClick = { showLicenseDialog = true },
-                    colors = ButtonDefaults.colors(
-                        containerColor = NuvioTheme.colors.Primary.copy(alpha = 0.2f),
-                        focusedContainerColor = NuvioTheme.colors.Primary,
-                        contentColor = Color.White,
-                        focusedContentColor = Color.Black
-                    ),
-                    border = ButtonDefaults.border(
-                        border = androidx.tv.material3.Border(
-                            border = androidx.compose.foundation.BorderStroke(1.dp, NuvioTheme.colors.Primary),
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                    )
-                ) {
-                    Text("Enter License Key", fontWeight = FontWeight.Bold)
-                }
-            }
             if (isSignedIn || !useEmailLogin) {
                 Button(
                     onClick = onRefreshOrSignOut,
@@ -439,11 +420,12 @@ private fun AuthQrLoginPane(
                     )
                 ) {
                     Text(
-                        when {
+                        text = when {
                             isSignedIn -> stringResource(R.string.account_sign_out)
                             uiState.isLoading -> stringResource(R.string.auth_qr_please_wait)
                             else -> stringResource(R.string.auth_qr_refresh)
-                        }
+                        },
+                        maxLines = 1
                     )
                 }
             }
@@ -455,24 +437,29 @@ private fun AuthQrLoginPane(
                     Modifier
                 },
                 colors = ButtonDefaults.colors(
-                    containerColor = AuthSecondaryButtonBackground,
+                    containerColor = if (isOnboardingMode && !isSignedIn) NuvioTheme.colors.Primary.copy(alpha = 0.2f) else AuthSecondaryButtonBackground,
                     focusedContainerColor = Color.White,
                     contentColor = AuthTextPrimary,
                     focusedContentColor = Color.Black
                 ),
                 border = ButtonDefaults.border(
                     border = androidx.tv.material3.Border(
-                        border = androidx.compose.foundation.BorderStroke(1.dp, AuthSecondaryButtonBorder),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp, 
+                            if (isOnboardingMode && !isSignedIn) NuvioTheme.colors.Primary else AuthSecondaryButtonBorder
+                        ),
                         shape = RoundedCornerShape(16.dp)
                     )
                 )
             ) {
                 Text(
-                    if (isOnboardingMode) {
-                        if (isSignedIn) stringResource(R.string.auth_qr_continue) else stringResource(R.string.auth_qr_continue_without_account)
+                    text = if (isOnboardingMode) {
+                        if (isSignedIn) stringResource(R.string.auth_qr_continue) else "Skip / Continue"
                     } else {
                         stringResource(R.string.auth_qr_back)
-                    }
+                    },
+                    maxLines = 1,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }

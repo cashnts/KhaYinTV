@@ -351,6 +351,7 @@ class MainActivity : ComponentActivity() {
             }
             val hasSeenAuthQrOnFirstLaunch by hasSeenAuthQrFlow.collectAsState(initial = null)
             val authState by authManager.authState.collectAsState()
+            val licenseState by com.nuvio.tv.features.license.LicenseRepository.state.collectAsState()
             val adminConfig by com.nuvio.tv.features.license.AdminControlRepository.config.collectAsState()
             val dismissedBroadcastTimestamp by com.nuvio.tv.features.license.AdminControlRepository.dismissedBroadcastTimestamp.collectAsState()
             val context = LocalContext.current
@@ -543,6 +544,22 @@ class MainActivity : ComponentActivity() {
                 ) {
                     if (adminConfig.maintenanceMode) {
                         com.nuvio.tv.features.license.ui.MaintenanceModeOverlay(notice = adminConfig.maintenanceNotice)
+                        return@Surface
+                    }
+
+                    if (licenseState is com.nuvio.tv.features.license.LicenseState.Loading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(NuvioTheme.colors.Background)
+                        )
+                        return@Surface
+                    }
+
+                    if (licenseState !is com.nuvio.tv.features.license.LicenseState.Active) {
+                        com.nuvio.tv.features.license.ui.LicenseGateScreen(
+                            onExit = { finish() }
+                        )
                         return@Surface
                     }
 
