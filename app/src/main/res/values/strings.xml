@@ -324,6 +324,8 @@
     <string name="appearance_subtitle">Choose your color theme, font and language</string>
     <string name="appearance_color_theme">Color Theme</string>
     <string name="appearance_color_theme_subtitle">Pick the accent color used across the app</string>
+    <string name="theme_color_khayin">KhaYin</string>
+    <string name="theme_color_dark_indigo">Dark Indigo</string>
     <string name="theme_color_gold">Gold</string>
     <string name="theme_color_jade">Jade</string>
     <string name="theme_color_rose_gold">Rose Gold</string>

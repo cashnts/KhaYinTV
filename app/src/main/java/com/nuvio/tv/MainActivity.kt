@@ -627,20 +627,18 @@ class MainActivity : ComponentActivity() {
                         return@Surface
                     }
 
-                    val shouldShowProfileSelection =
-                        !hasSelectedProfileThisSession && (profiles.size > 1 || activeProfileHasPin)
-
-                    if (shouldShowProfileSelection) {
-                        ProfileSelectionScreen(
-                            onProfileSelected = {
-                                hasSelectedProfileThisSession = true
-                                if (authManager.authState.value is AuthState.FullAccount) {
-                                    startupSyncService.requestSyncNow()
-                                }
+                    LaunchedEffect(licenseState) {
+                        if (licenseState is com.nuvio.tv.features.license.LicenseState.Active) {
+                            val info = (licenseState as com.nuvio.tv.features.license.LicenseState.Active).info
+                            val customerName = info.customerName?.takeIf { it.isNotBlank() } ?: "KhaYin"
+                            val currentProfile = profileManager.activeProfile
+                            if (currentProfile != null && currentProfile.name != customerName) {
+                                profileManager.updateProfile(currentProfile.copy(name = customerName, avatarColorHex = "#00E676"))
                             }
-                        )
-                        return@Surface
+                        }
                     }
+
+                    val shouldShowProfileSelection = false
 
                     val layoutChosen = mainUiPrefs.hasChosenLayout
                     if (layoutChosen == null || !mainUiPrefs.experienceModeLoaded || installedAddons == null) {

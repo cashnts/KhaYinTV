@@ -1,6 +1,8 @@
 package com.nuvio.tv.domain.model
 
 enum class AppTheme(val displayName: String) {
+    KHAYIN("KhaYin"),
+    DARK_INDIGO("Dark Indigo"),
     GOLD("Gold"),
     JADE("Jade"),
     ROSE_GOLD("Rose Gold"),

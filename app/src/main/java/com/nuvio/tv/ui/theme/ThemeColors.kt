@@ -26,6 +26,36 @@ data class ThemeColorPalette(
 )
 
 object ThemeColors {
+    val KhaYin = ThemeColorPalette(
+        secondary = Color(0xFF00E676),
+        secondaryVariant = Color(0xFF00C853),
+        onSecondary = Color.Black,
+        onSecondaryVariant = Color.Black,
+        accentGradient = listOf(Color(0xFF00E676), Color(0xFF00B0FF)),
+        focusRing = Color(0xFF69F0AE),
+        focusBackground = Color(0xFF0A2E1A),
+        background = Color(0xFF08090C),
+        backgroundElevated = Color(0xFF101217),
+        backgroundCard = Color(0xFF161920),
+        surface = Color(0xFF161920),
+        surfaceVariant = Color(0xFF1E222B)
+    )
+
+    val DarkIndigo = ThemeColorPalette(
+        secondary = Color(0xFF6366F1),
+        secondaryVariant = Color(0xFF4F46E5),
+        onSecondary = Color.White,
+        onSecondaryVariant = Color.White,
+        accentGradient = listOf(Color(0xFF6366F1), Color(0xFF8B5CF6)),
+        focusRing = Color(0xFFA5B4FC),
+        focusBackground = Color(0xFF1E1B4B),
+        background = Color(0xFF080811),
+        backgroundElevated = Color(0xFF111122),
+        backgroundCard = Color(0xFF18182E),
+        surface = Color(0xFF16162A),
+        surfaceVariant = Color(0xFF22223D)
+    )
+
     val Crimson = ThemeColorPalette(
         secondary = NuvioPrimitives.red500,
         secondaryVariant = NuvioPrimitives.red600,
@@ -92,6 +122,8 @@ object ThemeColors {
 
     fun getColorPalette(theme: AppTheme): ThemeColorPalette {
         return when (theme) {
+            AppTheme.KHAYIN -> KhaYin
+            AppTheme.DARK_INDIGO -> DarkIndigo
             AppTheme.GOLD -> SupporterThemeColors.Gold
             AppTheme.JADE -> SupporterThemeColors.Jade
             AppTheme.ROSE_GOLD -> SupporterThemeColors.RoseGold
