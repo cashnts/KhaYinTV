@@ -806,34 +806,36 @@ private fun RightStreamSection(
         modifier = modifier
             .padding(top = NuvioTheme.spacing.xxxl, end = NuvioTheme.spacing.xxxl, bottom = NuvioTheme.spacing.xxxl)
     ) {
-        val chipRowHeight = NuvioTheme.spacing.huge
+        val hasMultipleAddons = orderedAddonNames.size > 1
+        val chipRowHeight = if (hasMultipleAddons) NuvioTheme.spacing.huge else 0.dp
 
         // Addon filter chips
-        Box(modifier = Modifier.height(chipRowHeight)) {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = sourceChips.isNotEmpty() || (!isLoading && availableAddons.isNotEmpty()),
-                enter = fadeIn(animationSpec = tween(300)),
-                exit = fadeOut(animationSpec = tween(300))
-            ) {
-                AddonFilterChips(
-                    addons = availableAddons,
-                    sourceChips = sourceChips,
-                    selectedAddon = selectedAddonFilter,
-                    isStillFetching = sourceChips.any { it.status == SourceChipStatus.LOADING },
-                    onRefresh = {
-                        userMovedFromFirstResult = false
-                        firstResultFocusAssigned = false
-                        onRefresh()
-                    },
-                    onAddonSelected = { onAddonFilterSelected(it) },
-                    externalFocusRequesters = chipFocusRequesters,
-                    externalOrderedNames = orderedAddonNames,
-                    debugTag = "StreamScreen"
-                )
+        if (hasMultipleAddons) {
+            Box(modifier = Modifier.height(chipRowHeight)) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = sourceChips.isNotEmpty() || (!isLoading && availableAddons.isNotEmpty()),
+                    enter = fadeIn(animationSpec = tween(300)),
+                    exit = fadeOut(animationSpec = tween(300))
+                ) {
+                    AddonFilterChips(
+                        addons = availableAddons,
+                        sourceChips = sourceChips,
+                        selectedAddon = selectedAddonFilter,
+                        isStillFetching = sourceChips.any { it.status == SourceChipStatus.LOADING },
+                        onRefresh = {
+                            userMovedFromFirstResult = false
+                            firstResultFocusAssigned = false
+                            onRefresh()
+                        },
+                        onAddonSelected = { onAddonFilterSelected(it) },
+                        externalFocusRequesters = chipFocusRequesters,
+                        externalOrderedNames = orderedAddonNames,
+                        debugTag = "StreamScreen"
+                    )
+                }
             }
+            Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
         }
-
-        Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
 
         androidx.compose.animation.AnimatedVisibility(
             visible = enter,

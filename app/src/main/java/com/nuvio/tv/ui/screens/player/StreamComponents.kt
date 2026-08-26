@@ -253,6 +253,9 @@ internal fun AddonFilterChips(
             sourceChips.forEach { chip -> if (chip.name !in this) add(chip.name) }
         }
     }
+    if (orderedNames.size <= 1) {
+        return
+    }
     val hasRefresh = onRefresh != null
     val refreshFocusRequester = remember { FocusRequester() }
     val allFocusRequester = remember { FocusRequester() }

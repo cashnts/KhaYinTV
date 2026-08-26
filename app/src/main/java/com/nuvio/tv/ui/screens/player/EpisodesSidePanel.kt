@@ -318,33 +318,35 @@ private fun EpisodeStreamsView(
     Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
 
     // --- Filter chips ---
-    AnimatedVisibility(
-        visible = uiState.episodeSourceChips.isNotEmpty() || uiState.episodeAvailableAddons.isNotEmpty(),
-        enter = fadeIn(animationSpec = tween(200)),
-        exit = fadeOut(animationSpec = tween(120))
-    ) {
-        AddonFilterChips(
-            addons = uiState.episodeAvailableAddons,
-            sourceChips = uiState.episodeSourceChips,
-            selectedAddon = uiState.episodeSelectedAddonFilter,
-            isStillFetching = uiState.isLoadingEpisodeStreams ||
-                uiState.episodeSourceChips.any { it.status == SourceChipStatus.LOADING },
-            onRefresh = {
-                userMovedFromFirstResult = false
-                firstResultFocusAssigned = false
-                onReload()
-            },
-            onAddonSelected = { onAddonFilterSelected(it) },
-            externalFocusRequesters = chipFocusRequesters,
-            externalOrderedNames = orderedAddonNames,
-            onUpKey = {
-                try { backButtonFocusRequester.requestFocus() } catch (_: Exception) {}
-            },
-            debugTag = "EpisodeSidePanel"
-        )
-    }
+    if (orderedAddonNames.size > 1) {
+        AnimatedVisibility(
+            visible = uiState.episodeSourceChips.isNotEmpty() || uiState.episodeAvailableAddons.isNotEmpty(),
+            enter = fadeIn(animationSpec = tween(200)),
+            exit = fadeOut(animationSpec = tween(120))
+        ) {
+            AddonFilterChips(
+                addons = uiState.episodeAvailableAddons,
+                sourceChips = uiState.episodeSourceChips,
+                selectedAddon = uiState.episodeSelectedAddonFilter,
+                isStillFetching = uiState.isLoadingEpisodeStreams ||
+                    uiState.episodeSourceChips.any { it.status == SourceChipStatus.LOADING },
+                onRefresh = {
+                    userMovedFromFirstResult = false
+                    firstResultFocusAssigned = false
+                    onReload()
+                },
+                onAddonSelected = { onAddonFilterSelected(it) },
+                externalFocusRequesters = chipFocusRequesters,
+                externalOrderedNames = orderedAddonNames,
+                onUpKey = {
+                    try { backButtonFocusRequester.requestFocus() } catch (_: Exception) {}
+                },
+                debugTag = "EpisodeSidePanel"
+            )
+        }
 
-    Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
+        Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
+    }
 
     // --- Content ---
     when {

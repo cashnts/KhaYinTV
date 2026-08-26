@@ -253,33 +253,35 @@ internal fun StreamSourcesSidePanel(
 
             Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
 
-            AnimatedVisibility(
-                visible = uiState.sourceChips.isNotEmpty() || uiState.sourceAvailableAddons.isNotEmpty(),
-                enter = fadeIn(animationSpec = tween(200)),
-                exit = fadeOut(animationSpec = tween(120))
-            ) {
-                AddonFilterChips(
-                    addons = uiState.sourceAvailableAddons,
-                    sourceChips = uiState.sourceChips,
-                    selectedAddon = uiState.sourceSelectedAddonFilter,
-                    isStillFetching = uiState.isLoadingSourceStreams ||
-                        uiState.sourceChips.any { it.status == SourceChipStatus.LOADING },
-                    onRefresh = {
-                        userMovedFromFirstResult = false
-                        firstResultFocusAssigned = false
-                        onReload()
-                    },
-                    onAddonSelected = { onAddonFilterSelected(it) },
-                    externalFocusRequesters = chipFocusRequesters,
-                    externalOrderedNames = orderedAddonNames,
-                    onUpKey = {
-                        try { closeButtonFocusRequester.requestFocus() } catch (_: Exception) {}
-                    },
-                    debugTag = "SourcesSidePanel"
-                )
-            }
+            if (orderedAddonNames.size > 1) {
+                AnimatedVisibility(
+                    visible = uiState.sourceChips.isNotEmpty() || uiState.sourceAvailableAddons.isNotEmpty(),
+                    enter = fadeIn(animationSpec = tween(200)),
+                    exit = fadeOut(animationSpec = tween(120))
+                ) {
+                    AddonFilterChips(
+                        addons = uiState.sourceAvailableAddons,
+                        sourceChips = uiState.sourceChips,
+                        selectedAddon = uiState.sourceSelectedAddonFilter,
+                        isStillFetching = uiState.isLoadingSourceStreams ||
+                            uiState.sourceChips.any { it.status == SourceChipStatus.LOADING },
+                        onRefresh = {
+                            userMovedFromFirstResult = false
+                            firstResultFocusAssigned = false
+                            onReload()
+                        },
+                        onAddonSelected = { onAddonFilterSelected(it) },
+                        externalFocusRequesters = chipFocusRequesters,
+                        externalOrderedNames = orderedAddonNames,
+                        onUpKey = {
+                            try { closeButtonFocusRequester.requestFocus() } catch (_: Exception) {}
+                        },
+                        debugTag = "SourcesSidePanel"
+                    )
+                }
 
-            Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
+                Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
+            }
 
             when {
                 uiState.isLoadingSourceStreams -> {
