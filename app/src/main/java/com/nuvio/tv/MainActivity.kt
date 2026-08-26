@@ -317,6 +317,10 @@ class MainActivity : ComponentActivity() {
         // Wire the Activity-level launcher to the tracker
         externalPlaybackTracker.activityLauncher = externalPlayerLauncher
 
+        com.nuvio.tv.features.license.LicenseStorage.initialize(applicationContext)
+        com.nuvio.tv.features.license.LicenseRepository.initialize()
+        com.nuvio.tv.features.license.AdminControlRepository.startPolling()
+
         PluginRuntimeHooks.onActivityCreate(this)
 
         window?.decorView?.post {
@@ -347,6 +351,8 @@ class MainActivity : ComponentActivity() {
             }
             val hasSeenAuthQrOnFirstLaunch by hasSeenAuthQrFlow.collectAsState(initial = null)
             val authState by authManager.authState.collectAsState()
+            val adminConfig by com.nuvio.tv.features.license.AdminControlRepository.config.collectAsState()
+            val dismissedBroadcastTimestamp by com.nuvio.tv.features.license.AdminControlRepository.dismissedBroadcastTimestamp.collectAsState()
             val context = LocalContext.current
 
             LaunchedEffect(authSessionNoticeDataStore, context) {
@@ -535,6 +541,11 @@ class MainActivity : ComponentActivity() {
                         containerColor = NuvioTheme.colors.Background
                     )
                 ) {
+                    if (adminConfig.maintenanceMode) {
+                        com.nuvio.tv.features.license.ui.MaintenanceModeOverlay(notice = adminConfig.maintenanceNotice)
+                        return@Surface
+                    }
+
                     if (hasSeenAuthQrOnFirstLaunch == null) {
                         Box(
                             modifier = Modifier
@@ -1360,11 +1371,18 @@ private fun LegacySidebarScaffold(
                 LocalSidebarExpanded provides (drawerState.currentValue == DrawerValue.Open),
                 LocalContentFocusRequester provides contentFocusRequester
             ) {
-                NuvioNavHost(
-                    navController = navController,
-                    startDestination = startDestination,
-                    hideBuiltInHeaders = hideBuiltInHeaders
-                )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    val adminConfig by com.nuvio.tv.features.license.AdminControlRepository.config.collectAsState()
+                    val dismissedTimestamp by com.nuvio.tv.features.license.AdminControlRepository.dismissedBroadcastTimestamp.collectAsState()
+                    if (adminConfig.broadcastMessage.isNotBlank() && adminConfig.broadcastTimestamp > dismissedTimestamp) {
+                        com.nuvio.tv.features.license.ui.BroadcastNoticeBanner(config = adminConfig)
+                    }
+                    NuvioNavHost(
+                        navController = navController,
+                        startDestination = startDestination,
+                        hideBuiltInHeaders = hideBuiltInHeaders
+                    )
+                }
             }
         }
     }
@@ -1759,11 +1777,18 @@ private fun ModernSidebarScaffold(
                 LocalSidebarExpanded provides isSidebarExpanded,
                 LocalContentFocusRequester provides contentFocusRequester
             ) {
-                NuvioNavHost(
-                    navController = navController,
-                    startDestination = startDestination,
-                    hideBuiltInHeaders = hideBuiltInHeaders
-                )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    val adminConfig by com.nuvio.tv.features.license.AdminControlRepository.config.collectAsState()
+                    val dismissedTimestamp by com.nuvio.tv.features.license.AdminControlRepository.dismissedBroadcastTimestamp.collectAsState()
+                    if (adminConfig.broadcastMessage.isNotBlank() && adminConfig.broadcastTimestamp > dismissedTimestamp) {
+                        com.nuvio.tv.features.license.ui.BroadcastNoticeBanner(config = adminConfig)
+                    }
+                    NuvioNavHost(
+                        navController = navController,
+                        startDestination = startDestination,
+                        hideBuiltInHeaders = hideBuiltInHeaders
+                    )
+                }
             }
         }
 

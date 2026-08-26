@@ -93,7 +93,7 @@
     <string name="web_import_error_source_missing_addon_fields">စုစည်းမှု \"{collection}\", ဖိုဒါ \"{folder}\", အရင်းအမြစ် {index}- လိုအပ်သော အချက်အလက်များ မပြည့်စုံပါ (addonId, type, catalogId)</string>
     <string name="web_import_error_source_missing_tmdb_type">စုစည်းမှု \"{collection}\", ဖိုဒါ \"{folder}\", အရင်းအမြစ် {index}- TMDB အရင်းအမြစ် အမျိုးအစား မပါဝင်ပါ</string>
     <string name="web_import_error_source_missing_trakt_id">စုစည်းမှု \"{collection}\", ဖိုဒါ \"{folder}\", အရင်းအမြစ် {index}- Trakt စာရင်း ID မပါဝင်ပါ</string>
-    <string name="web_import_success">စုစည်းမှု {count} ခု ထည့်သွင်းပြီးပါပြီ။ စစ်ဆေးပြီး အပြောင်းအလဲများကို အသုံးပြုရန် 'သိမ်းရန်' ကို နှိပ်ပါ။</string>
+    <string name="web_import_success">စုစည်းမှု {count} ခု ထည့်သွင်းပြီးပါပြီ။ စစ်ဆေးပြီး အပြောင်းအလဲများကို အသုံးပြုရန် \'သိမ်းရန်\' ကို နှိပ်ပါ။</string>
     <string name="web_import_invalid_json">မမှန်ကန်သော JSON</string>
 
     <string name="home_no_addons">မည်သည့် Addon မျှ မထည့်သွင်းရသေးပါ။ စတင်ရန် Addon တစ်ခု ထည့်သွင်းပါ။</string>
@@ -742,7 +742,7 @@
     <string name="audio_decoder_prefer_app">အက်ပ် Decoder (FFmpeg) များကို ဦးစားပေးရန်</string>
     <string name="audio_decoder_priority">Decoder ဦးစားပေးမှု</string>
     <string name="audio_enable_downmix_title">Downmix ကို ဖွင့်ရန်</string>
-    <string name="audio_enable_downmix_subtitle">FFmpeg downmix လမ်းကြောင်းကို အသုံးပြုသည်။ 'အက်ပ် Decoder (FFmpeg) များကို ဦးစားပေးရန်' လိုအပ်ပါသည်။ ပိတ်ထားပါက ယခင် Android/စက်ပစ္စည်း လမ်းကြောင်းအတိုင်း အသံထွက်ပါမည်။</string>
+    <string name="audio_enable_downmix_subtitle">FFmpeg downmix လမ်းကြောင်းကို အသုံးပြုသည်။ \'အက်ပ် Decoder (FFmpeg) များကို ဦးစားပေးရန်\' လိုအပ်ပါသည်။ ပိတ်ထားပါက ယခင် Android/စက်ပစ္စည်း လမ်းကြောင်းအတိုင်း အသံထွက်ပါမည်။</string>
     <string name="audio_tunneled">Tunneled ဖွင့်စနစ်</string>
     <string name="audio_tunneled_sub">ဟာ့ဒ်ဝဲအဆင့် အသံ/ဗီဒီယို တစ်ပြိုင်တည်းချိန်ညှိမှု။ အချို့သော Android TV စက်ပစ္စည်းများတွင် ဖွင့်စနစ်ကို ပိုမိုကောင်းမွန်စေနိုင်သည်</string>
     <string name="audio_force_optical_passthrough">AC-3 သို့ အတင်းပြောင်းလဲရန် (Optical/SPDIF)</string>
@@ -763,7 +763,7 @@
     <string name="audio_dv5_to_dv81_title">DV5 မှ DV8.1 သို့ ပြောင်းရန်</string>
     <string name="audio_dv5_to_dv81_sub">HDR10 နှင့် ကိုက်ညီသော ရုပ်ထွက်အတွက် Profile 5 stream များကို Profile 8.1 အဖြစ် ပြောင်းလဲသည်။ မူရင်း DV5 decoder မပါဝင်သော စက်ပစ္စည်းများတွင် အထောက်အကူပြုသည်။</string>
     <string name="audio_strip_hdr10plus_title">HDR10+ Metadata ကို ဖယ်ထုတ်ရန်</string>
-    <string name="audio_strip_hdr10plus_sub">Stream များမှ HDR10+ dynamic metadata ကို ဖယ်ရှားပါ။ 'DV8.1 သို့ ပြောင်းရန်' ကိုလည်း ဖွင့်ထားပါက ပြောင်းလဲပြီးနောက် ဖယ်ရှားမှု ပြုလုပ်ပါမည်။</string>
+    <string name="audio_strip_hdr10plus_sub">Stream များမှ HDR10+ dynamic metadata ကို ဖယ်ရှားပါ။ \'DV8.1 သို့ ပြောင်းရန်\' ကိုလည်း ဖွင့်ထားပါက ပြောင်းလဲပြီးနောက် ဖယ်ရှားမှု ပြုလုပ်ပါမည်။</string>
     <string name="audio_dv7_preserve_mapping_title">DV Mapping ကို ထိန်းသိမ်းရန် (DV7 မှ DV8.1 သို့)</string>
     <string name="audio_dv7_preserve_mapping_sub">ဖရိမ်တစ်ခုစီအတွက် လုပ်ဆောင်မှု အနည်းငယ် ပိုမိုသုံးစွဲရသော်လည်း မူရင်းဖန်တီးသူ ရည်ရွယ်ထားသော tone-mapping ကို ထိန်းသိမ်းပေးသည်။</string>
     <string name="dv7_libdovi_mode_caption" translatable="false">Conversion mode (auto-selected, do not change unless instructed). Pick one to force it; None uses auto. Active only when DV7 Handling is Convert to DV8.1.</string>
@@ -927,7 +927,7 @@
     <string name="layout_discover_location_action">Discover တည်နေရာ</string>
     <string name="layout_discover_location_dialog_title">Discover တည်နေရာ</string>
     <string name="layout_discover_location_in_search">ရှာဖွေမှုတွင် ပြရန်</string>
-    <string name="layout_discover_location_in_search_desc">Discover ကို 'ရှာဖွေရန်' တက်ဘ်အတွင်း ပြသပါမည်။</string>
+    <string name="layout_discover_location_in_search_desc">Discover ကို \'ရှာဖွေရန်\' တက်ဘ်အတွင်း ပြသပါမည်။</string>
     <string name="layout_discover_location_in_sidebar">ဘေးဘောင်တွင် ပြရန်</string>
     <string name="layout_discover_location_in_sidebar_desc">Discover ကို ဘေးဘောင်တွင် သီးခြားအရာအဖြစ် ပြသပါမည်။</string>
     <string name="layout_poster_labels">ပိုစတာ စာတန်းများကို ပြရန်</string>
@@ -1129,7 +1129,7 @@
     <string name="debrid_prepare_instant_playback">လင့်ခ်များကို ကြိုတင်ပြင်ဆင်ရန်</string>
     <string name="debrid_prepare_instant_playback_description">ဗီဒီယိုမစတင်မီ ဖွင့်နိုင်သော လင့်ခ်များကို ကြိုတင်ရယူပါ။</string>
     <string name="debrid_prepare_stream_count">ကြိုတင်ပြင်ဆင်မည့် လင့်ခ်အရေအတွက်</string>
-    <string name="debrid_prepare_stream_count_warning">ဖြစ်နိုင်ပါက အရေအတွက်နည်းနည်းသာ သုံးပါ။ ချိတ်ဆက်ထားသော ဝန်ဆောင်မှုများသည် သတ်မှတ်ချိန်အတွင်း လင့်ခ်ရယူနိုင်သည့် အကြိမ်အရေအတွက်ကို ကန့်သတ်ထားနိုင်သည်။ လင့်ခ်များကို ကြိုတင်ပြင်ဆင်ထားသောကြောင့် သင် 'ကြည့်ရှုရန်' ကို မနှိပ်သော်လည်း ရုပ်ရှင် သို့မဟုတ် အပိုင်းကို ဖွင့်ကြည့်ရုံဖြင့် ထိုကန့်သတ်ချက်များထဲ ထည့်တွက်ခံရနိုင်ပါသည်။</string>
+    <string name="debrid_prepare_stream_count_warning">ဖြစ်နိုင်ပါက အရေအတွက်နည်းနည်းသာ သုံးပါ။ ချိတ်ဆက်ထားသော ဝန်ဆောင်မှုများသည် သတ်မှတ်ချိန်အတွင်း လင့်ခ်ရယူနိုင်သည့် အကြိမ်အရေအတွက်ကို ကန့်သတ်ထားနိုင်သည်။ လင့်ခ်များကို ကြိုတင်ပြင်ဆင်ထားသောကြောင့် သင် \'ကြည့်ရှုရန်\' ကို မနှိပ်သော်လည်း ရုပ်ရှင် သို့မဟုတ် အပိုင်းကို ဖွင့်ကြည့်ရုံဖြင့် ထိုကန့်သတ်ချက်များထဲ ထည့်တွက်ခံရနိုင်ပါသည်။</string>
     <string name="debrid_prepare_count_one">လင့်ခ် ၁ ခု</string>
     <string name="debrid_prepare_count_many">လင့်ခ် %1$d ခု</string>
     <string name="debrid_stream_max_results_title">အများဆုံး ရလဒ်များ</string>
@@ -1304,7 +1304,7 @@
     <string name="qr_login_exchange_failed">QR အကောင့်ဝင်ရောက်မှုကို မပြီးမြောက်နိုင်ပါ</string>
     <string name="trakt_code_expires">ကုဒ် သက်တမ်းသည် %1$s အတွင်း ကုန်ဆုံးမည်</string>
     <string name="trakt_token_refreshes">Trakt access token သည် %1$s အတွင်း သက်တမ်းတိုးမည်</string>
-    <string name="trakt_login_instruction">Trakt စက်ပစ္စည်း အတည်ပြုခြင်းကို စတင်ရန် 'အကောင့်ဝင်ရန်' ကို နှိပ်ပါ။ QR ကုဒ်တစ်ခု ဤနေရာတွင် ပေါ်လာပါမည်။</string>
+    <string name="trakt_login_instruction">Trakt စက်ပစ္စည်း အတည်ပြုခြင်းကို စတင်ရန် \'အကောင့်ဝင်ရန်\' ကို နှိပ်ပါ။ QR ကုဒ်တစ်ခု ဤနေရာတွင် ပေါ်လာပါမည်။</string>
     <string name="trakt_missing_credentials">local.properties တွင် TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET လိုအပ်နေပါသည်။</string>
     <string name="trakt_watch_progress_title">ကြည့်ရှုမှု တိုးတက်မှု</string>
     <string name="trakt_watch_progress_subtitle">ပြန်လည်ဆက်ကြည့်ရန်နှင့် ဆက်လက်ကြည့်ရှုရန်အတွက် မည်သည့် တိုးတက်မှု အရင်းအမြစ်ကို သုံးမည်ကို ရွေးပါ</string>
@@ -1379,7 +1379,7 @@
     <string name="debug_account_tab_title">အကောင့် တက်ဘ်</string>
     <string name="debug_account_tab_subtitle">ဆက်တင်များ လမ်းညွှန်မှုတွင် အကောင့်တက်ဘ်ကို ပြသပါ</string>
     <string name="debug_sync_code_title">ထပ်တူပြုကုဒ် လုပ်ဆောင်ချက်များ</string>
-    <string name="debug_sync_code_subtitle">အကောင့် ဆက်တင်များတွင် 'ထပ်တူပြုကုဒ် ထုတ်ယူရန်/ထည့်သွင်းရန်' ခလုတ်များကို ပြသပါ</string>
+    <string name="debug_sync_code_subtitle">အကောင့် ဆက်တင်များတွင် \'ထပ်တူပြုကုဒ် ထုတ်ယူရန်/ထည့်သွင်းရန်\' ခလုတ်များကို ပြသပါ</string>
     <string name="debug_member_tier_title">Supporter အဆင့်ကို စမ်းသပ်ရန်</string>
     <string name="debug_member_tier_subtitle">ဤ debug build တွင် စစ်ဆေးပြီး အဖွဲ့ဝင်အဆင့် မည်သည်ကို ပြသမမည်ကို ရွေးပါ</string>
     <string name="debug_member_tier_none">မရှိ</string>
@@ -1987,7 +1987,7 @@
     <string name="official_server_action">တရားဝင်ဆာဗာကို သုံးရန်</string>
     <string name="custom_server_error_invalid_url">တရားဝင် HTTP သို့မဟုတ် HTTPS Backend URL ရိုက်ထည့်ပါ။</string>
     <string name="custom_server_error_official_active">api.stream.khayin.net သည် တရားဝင်ဆာဗာဖြစ်ပြီး ရွေးချယ်ထားပြီးသား ဖြစ်သည်။</string>
-    <string name="custom_server_error_official_available">api.stream.khayin.net သည် တရားဝင်ဆာဗာဖြစ်သည်။ ပြန်ပြောင်းရန် ဤဘောင်ကိုပိတ်ပြီး 'တရားဝင်ဆာဗာကို သုံးရန်' ကို ရွေးပါ။</string>
+    <string name="custom_server_error_official_available">api.stream.khayin.net သည် တရားဝင်ဆာဗာဖြစ်သည်။ ပြန်ပြောင်းရန် ဤဘောင်ကိုပိတ်ပြီး \'တရားဝင်ဆာဗာကို သုံးရန်\' ကို ရွေးပါ။</string>
     <string name="custom_server_error_connection">Discovery endpoint သို့ ချိတ်ဆက်၍ မရပါ။ URL နှင့် ဆာဗာ အခြေအနေကို စစ်ဆေးပါ။</string>
     <string name="custom_server_error_http">Discovery endpoint မှ HTTP %1$d ပြန်ပေးခဲ့သည်။</string>
     <string name="custom_server_error_response_too_large">Discovery document သည် ခွင့်ပြုထားသည်ထက် ပိုကြီးနေပါသည်။</string>
@@ -2733,7 +2733,7 @@
     <string name="simkl_sync_info_title">Simkl ထပ်တူပြုမှု မည်သို့အလုပ်လုပ်သနည်း</string>
     <string name="simkl_sync_info_description">Nuvio သည် Simkl ကို အများဆုံး %1$d မိနစ်လျှင် တစ်ကြိမ် အလိုအလျောက် စစ်ဆေးပါသည်။ အခြားအက်ပ် သို့မဟုတ် Simkl ဝဘ်ဆိုက်မှ ပြုလုပ်ခဲ့သော အပြောင်းအလဲများ ပေါ်လာရန် ထိုမျှ ကြာမြင့်နိုင်ပါသည်။</string>
     <string name="simkl_sync_info_activity">ပြန်လည်ရယူမှုတိုင်းသည် ပထမဦးစွာ Simkl မှ အပြောင်းအလဲရှိမရှိ စစ်ဆေးပြီး အသစ်ပြင်ဆင်ချက်များကိုသာ ဒေါင်းလုဒ်လုပ်သည်။ ၎င်းသည် Simkl ၏ API စည်းမျဉ်းများကို လိုက်နာပြီး မလိုအပ်သော ဒေတာသုံးစွဲမှုကို လျှော့ချကာ ဝန်ဆောင်မှုကို တည်ငြိမ်စေပါသည်။</string>
-    <string name="simkl_sync_info_manual">Nuvio တွင် ပြုလုပ်သော အပြောင်းအလဲများကို Simkl သို့ ချက်ချင်း ပေးပို့ပါသည်။ အဝေးမှ အပြောင်းအလဲများကို Nuvio က ပိုမိုမြန်ဆန်စွာ စစ်ဆေးစေလိုပါက 'ယခု ထပ်တူပြုရန်' ကို သုံးပါ။</string>
+    <string name="simkl_sync_info_manual">Nuvio တွင် ပြုလုပ်သော အပြောင်းအလဲများကို Simkl သို့ ချက်ချင်း ပေးပို့ပါသည်။ အဝေးမှ အပြောင်းအလဲများကို Nuvio က ပိုမိုမြန်ဆန်စွာ စစ်ဆေးစေလိုပါက \'ယခု ထပ်တူပြုရန်\' ကို သုံးပါ။</string>
     <string name="simkl_sync_info_library_statuses">Simkl ၏ ဆိုင်းငံ့ထားသော သို့မဟုတ် စွန့်လွှတ်ထားသော စာရင်းများတွင် ထည့်ထားသော ဇာတ်လမ်းတွဲများကို ဆက်လက်ကြည့်ရှုရန်မှ ဝှက်ထားမည်ဖြစ်သည်။ ၎င်းစာရင်းများတွင် ရှိနေသရွေ့ ဝှက်ထားမည် ဖြစ်သည်။</string>
     <string name="simkl_sync_info_docs">Simkl ထပ်တူပြုမှု လမ်းညွှန်ကို ဖတ်ရှုပါ</string>
     <string name="error_open_browser_failed">ဘရောက်ဆာ ဖွင့်၍ မရပါ</string>
@@ -2984,7 +2984,7 @@
     <string name="playback_buffer_managed_sub">Buffer ကို ဤစက်ပစ္စည်းမန်မိုရီ၏ ဘေးကင်းသော အချိုးအစားဖြင့် ကန့်သတ်ထားသည်။ ပစ်မှတ် Buffer အရွယ်အစားကို ကိုယ်တိုင်သတ်မှတ်ရန် ပိတ်ပါ (အဆင့်မြင့် - တန်ဖိုးကြီးပါက မန်မိုရီနည်းသောစက်များ ပျက်ကျနိုင်သည်)။</string>
     <string name="playback_buffer_target">ပစ်မှတ် Buffer အရွယ်အစား</string>
     <string name="playback_buffer_target_sub">ကြိုတင် buffer လုပ်ရန် အသုံးပြုမည့် အများဆုံး RAM။ အများဆုံးပမာဏကို သင့်စက်၏ ရရှိနိုင်သော မန်မိုရီမှ တွက်ချက်ထားသဖြင့် RAM များသောစက်များသည် ကန့်သတ်ချက် ပိုကြီးမားစွာ အလိုအလျောက် ရရှိပါမည်။</string>
-    <string name="playback_buffer_target_managed_hint">စက်ပစ္စည်း မန်မိုရီဘတ်ဂျက်ဖြင့် ထိန်းညှိထားသည်။ ၎င်းကို သတ်မှတ်ရန် 'ထိန်းညှိထားသော မန်မိုရီပမာဏ' ကို ပိတ်ပါ။</string>
+    <string name="playback_buffer_target_managed_hint">စက်ပစ္စည်း မန်မိုရီဘတ်ဂျက်ဖြင့် ထိန်းညှိထားသည်။ ၎င်းကို သတ်မှတ်ရန် \'ထိန်းညှိထားသော မန်မိုရီပမာဏ\' ကို ပိတ်ပါ။</string>
     <string name="playback_buffer_target_warning">သတိပေးချက်- စက်ပစ္စည်း ဘေးကင်းသော ကန့်သတ်ချက် (%1$d MB) ထက် ကျော်လွန်နေသည်။ ဖွင့်နေစဉ် အက်ပ် ပျက်ကျနိုင်ပါသည်။</string>
     <string name="playback_buffer_target_danger_warning">အန္တရာယ်- သတိပေးကန့်သတ်ချက် (%1$d MB) ထက် ကျော်လွန်နေသည်။ အက်ပ် ပျက်ကျနိုင်ခြေ မြင့်မားသည်။</string>
     <string name="playback_buffer_allow_large">ပိုကြီးသော ပစ်မှတ် Buffer ကို ခွင့်ပြုရန်</string>

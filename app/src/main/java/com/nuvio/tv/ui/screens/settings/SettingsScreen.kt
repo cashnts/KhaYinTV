@@ -176,32 +176,11 @@ private fun rememberSettingsSectionSpecs() = listOf(
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
-        category = SettingsCategory.CONTENT_DISCOVERY,
-        title = stringResource(R.string.settings_content_discovery),
-        icon = Icons.Default.Explore,
-        subtitle = stringResource(R.string.settings_content_discovery_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.INTEGRATION,
-        title = stringResource(R.string.settings_integration),
-        icon = Icons.Default.Link,
-        subtitle = "",
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
         category = SettingsCategory.PLAYBACK,
         title = stringResource(R.string.settings_playback),
         icon = Icons.Rounded.PlayArrow,
         subtitle = stringResource(R.string.settings_playback_subtitle),
         destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.TRACKING,
-        title = stringResource(R.string.settings_tracking_title),
-        icon = Icons.Default.Sync,
-        subtitle = stringResource(R.string.settings_tracking_subtitle),
-        destination = SettingsSectionDestination.External
     ),
     SettingsSectionSpec(
         category = SettingsCategory.ABOUT,

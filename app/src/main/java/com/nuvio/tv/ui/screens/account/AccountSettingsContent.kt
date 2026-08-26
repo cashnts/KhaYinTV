@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,52 +64,103 @@ fun AccountSettingsContent(
     onNavigateToAuthQrSignIn: () -> Unit = {},
     initialFocusRequester: FocusRequester? = null
 ) {
-    if (uiState.authState is AuthState.FullAccount) {
-        SignedInAccountSettingsContent(
-            uiState = uiState,
-            viewModel = viewModel,
-            initialFocusRequester = initialFocusRequester
+    var showLicenseDialog by remember { mutableStateOf(false) }
+    val licenseState by com.nuvio.tv.features.license.LicenseRepository.state.collectAsState()
+
+    if (showLicenseDialog) {
+        com.nuvio.tv.features.license.ui.LicenseKeyInputDialog(
+            onDismiss = { showLicenseDialog = false }
         )
-        return
     }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = NuvioTheme.spacing.sm),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        when (val authState = uiState.authState) {
-            is AuthState.Loading -> {
-                item(key = "account_loading") {
-                    Text(
-                        text = stringResource(R.string.account_loading),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioTheme.colors.TextSecondary
+        // 1. License Card Section
+        item(key = "license_header") {
+            Text(
+                text = "KhaYin License",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = NuvioTheme.colors.TextPrimary
+            )
+        }
+
+        when (val lic = licenseState) {
+            is com.nuvio.tv.features.license.LicenseState.Active -> {
+                item(key = "license_active_card") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                color = NuvioTheme.colors.Primary.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(NuvioTheme.radii.sm)
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = NuvioTheme.colors.Primary.copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(NuvioTheme.radii.sm)
+                            )
+                            .padding(14.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = NuvioTheme.colors.Primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = "Active License (${lic.info.tier?.uppercase() ?: "STANDARD"})",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = NuvioTheme.colors.TextPrimary
+                                    )
+                                }
+                                Text(
+                                    text = if (lic.info.isLifetime) "Lifetime Access" else "Expires: ${lic.info.expiresAt?.substringBefore("T") ?: "N/A"}",
+                                    fontSize = 11.sp,
+                                    color = NuvioTheme.colors.TextSecondary
+                                )
+                            }
+                            Text(
+                                text = "Key: ${lic.info.key}",
+                                fontSize = 12.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                color = NuvioTheme.colors.TextSecondary
+                            )
+                        }
+                    }
+                }
+                item(key = "license_deactivate_btn") {
+                    SettingsActionButton(
+                        icon = Icons.AutoMirrored.Filled.Logout,
+                        title = "Deactivate License",
+                        subtitle = "Remove this key and unlink this TV device",
+                        onClick = {
+                            com.nuvio.tv.features.license.LicenseRepository.deactivate()
+                        }
                     )
                 }
             }
-
-            is AuthState.SignedOut -> {
-                item(key = "account_signed_out_info") {
-                    Text(
-                        text = stringResource(R.string.account_sync_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = NuvioTheme.colors.TextSecondary
-                    )
-                }
-                item(key = "account_sync_note_signed_out") {
-                    AccountInlineNote(text = stringResource(R.string.account_sync_restart_note))
-                }
-                item(key = "account_sign_in_qr") {
+            else -> {
+                item(key = "license_unlicensed_card") {
                     SettingsActionButton(
                         icon = Icons.Default.VpnKey,
-                        title = stringResource(
-                            if (viewModel.usesEmailPasswordLogin) R.string.account_signin_email_title else R.string.account_signin_qr_title
-                        ),
-                        subtitle = stringResource(
-                            if (viewModel.usesEmailPasswordLogin) R.string.account_signin_email_subtitle else R.string.account_signin_qr_subtitle
-                        ),
-                        onClick = onNavigateToAuthQrSignIn,
+                        title = "Activate KhaYin License Key",
+                        subtitle = "Enter your license key to unlock stream access",
+                        onClick = { showLicenseDialog = true },
                         modifier = if (initialFocusRequester != null) {
                             Modifier.focusRequester(initialFocusRequester)
                         } else {
@@ -117,9 +169,42 @@ fun AccountSettingsContent(
                     )
                 }
             }
+        }
 
-            is AuthState.FullAccount -> Unit
+        // 2. Cloud Account Sync Section
+        item(key = "account_sync_header") {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Cloud Account Sync",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = NuvioTheme.colors.TextPrimary
+            )
+        }
 
+        if (uiState.authState is AuthState.FullAccount) {
+            val authState = uiState.authState
+            item(key = "account_status") {
+                StatusCard(label = stringResource(R.string.account_signed_in_label), value = authState.email)
+            }
+            item(key = "account_sign_out") {
+                SignOutSettingsButton(
+                    onClick = { viewModel.signOut() }
+                )
+            }
+        } else {
+            item(key = "account_sign_in_qr") {
+                SettingsActionButton(
+                    icon = Icons.Default.VpnKey,
+                    title = stringResource(
+                        if (viewModel.usesEmailPasswordLogin) R.string.account_signin_email_title else R.string.account_signin_qr_title
+                    ),
+                    subtitle = stringResource(
+                        if (viewModel.usesEmailPasswordLogin) R.string.account_signin_email_subtitle else R.string.account_signin_qr_subtitle
+                    ),
+                    onClick = onNavigateToAuthQrSignIn
+                )
+            }
         }
     }
 }
