@@ -1,0 +1,182 @@
+name: KhaYin TV Android Release Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_override:
+        description: 'Optional version tag override (e.g. 5.4.0). Leave empty to use build.gradle.kts'
+        required: false
+        type: string
+        default: ''
+      create_github_release:
+        description: 'Publish or update GitHub Release'
+        required: true
+        type: boolean
+        default: true
+  push:
+    branches:
+      - main
+      - dev
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: khayin-tv-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Resolve Version Metadata
+  # ---------------------------------------------------------------------------
+  metadata:
+    name: Resolve Version Metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version_step.outputs.version }}
+      clean_version: ${{ steps.version_step.outputs.clean_version }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Determine Version
+        id: version_step
+        run: |
+          if [ -n "${{ inputs.version_override }}" ]; then
+            RAW_VERSION="${{ inputs.version_override }}"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            RAW_VERSION="${GITHUB_REF_NAME#v}"
+          else
+            RAW_VERSION=$(grep 'versionName = ' app/build.gradle.kts | head -n 1 | cut -d'"' -f2 | tr -d ' \r\n')
+            if [ -z "${RAW_VERSION}" ]; then
+              RAW_VERSION="5.4.0"
+            fi
+          fi
+          
+          CLEAN_VERSION=$(echo "${RAW_VERSION}" | tr -cd '[:alnum:]._-')
+          echo "version=${CLEAN_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "clean_version=${CLEAN_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${CLEAN_VERSION}"
+
+  # ---------------------------------------------------------------------------
+  # 2. Build Android TV APKs
+  # ---------------------------------------------------------------------------
+  build-tv:
+    name: Build Android TV APKs
+    needs: metadata
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Configure Keystore & Environment Secrets
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.KHAYIN_RELEASE_KEYSTORE_BASE64 || secrets.RELEASE_KEYSTORE_BASE64 || secrets.NUVIO_RELEASE_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KHAYIN_RELEASE_KEY_ALIAS || secrets.RELEASE_KEY_ALIAS || secrets.NUVIO_RELEASE_KEY_ALIAS || 'nuviotv' }}
+          KEY_PASSWORD: ${{ secrets.KHAYIN_RELEASE_KEY_PASSWORD || secrets.RELEASE_KEY_PASSWORD || secrets.NUVIO_RELEASE_KEY_PASSWORD || '815787' }}
+          STORE_PASSWORD: ${{ secrets.KHAYIN_RELEASE_STORE_PASSWORD || secrets.RELEASE_STORE_PASSWORD || secrets.NUVIO_RELEASE_STORE_PASSWORD || '815787' }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN || 'https://03b275d4c26ccf95402bcd0a9a9f9b7f@o4511970100641792.ingest.us.sentry.io/4511970104705024' }}
+        run: |
+          mkdir -p ~/.gradle
+          echo "org.gradle.jvmargs=-Xmx8192m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> ~/.gradle/gradle.properties
+
+          cat << 'EOF' > local.properties
+          sdk.dir=/usr/local/lib/android/sdk
+          USE_LOCAL_FFMPEG_DECODER=false
+          EOF
+          echo "SENTRY_DSN=${SENTRY_DSN}" >> local.properties
+
+          if [ -n "${RELEASE_KEYSTORE_BASE64}" ]; then
+            echo "${RELEASE_KEYSTORE_BASE64}" | base64 -d > release.jks
+            echo "NUVIO_RELEASE_STORE_FILE=$(pwd)/release.jks" >> local.properties
+            echo "NUVIO_RELEASE_KEY_ALIAS=${KEY_ALIAS}" >> local.properties
+            echo "NUVIO_RELEASE_KEY_PASSWORD=${KEY_PASSWORD}" >> local.properties
+            echo "NUVIO_RELEASE_STORE_PASSWORD=${STORE_PASSWORD}" >> local.properties
+            echo "Signing configured with provided keystore."
+          else
+            echo "CI_USE_DEBUG_SIGNING=true" >> "$GITHUB_ENV"
+            echo "No keystore secret found; falling back to debug/default signing."
+          fi
+
+      - name: Build Android TV Release APK
+        run: |
+          ./gradlew :app:assembleFullRelease || ./gradlew :app:assembleFullDebug
+
+      - name: Stage & Rename Release Artifacts
+        run: |
+          mkdir -p artifacts
+          APK_DIR="app/build/outputs/apk/full/release"
+          if [ ! -d "$APK_DIR" ] || [ -z "$(ls -A "$APK_DIR" 2>/dev/null)" ]; then
+            APK_DIR="app/build/outputs/apk/full/debug"
+          fi
+
+          echo "Collecting APKs from: $APK_DIR"
+          for apk in "$APK_DIR"/*.apk; do
+            if [ -f "$apk" ]; then
+              base=$(basename "$apk")
+              cp "$apk" "artifacts/KhaYinTV-${{ needs.metadata.outputs.clean_version }}-${base}"
+            fi
+          done
+          ls -la artifacts/
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: khayin-tv-apks-${{ needs.metadata.outputs.clean_version }}
+          path: artifacts/*.apk
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 3. Create GitHub Release
+  # ---------------------------------------------------------------------------
+  github-release:
+    name: Create GitHub Release
+    needs: [metadata, build-tv]
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.create_github_release == true)
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Built APKs
+        uses: actions/download-artifact@v4
+        with:
+          name: khayin-tv-apks-${{ needs.metadata.outputs.clean_version }}
+          path: release-assets/
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.metadata.outputs.clean_version }}
+          name: KhaYin TV v${{ needs.metadata.outputs.clean_version }}
+          body: |
+            ### 📺 KhaYin TV v${{ needs.metadata.outputs.clean_version }} (Android TV Release)
+            
+            Dedicated Leanback / Android TV application built with Jetpack Compose for TV.
+            
+            #### Highlights:
+            - **Native 10-Foot UI**: Purpose-built remote control & D-pad navigation.
+            - **KhaYin Security Bridge**: HMAC signature verification & payload protection.
+            - **Rich Genre Catalogs**: Action, Animation, Comedy, Crime, Documentary, Drama, Family, Fantasy, Horror, Mystery, Romance, Sci-Fi, Thriller, and more.
+            - **Multilingual & Burmese**: Complete Myanmar (Burmese) localization.
+            - **High Performance Playback**: Media3 player engine with automatic fallback & streaming optimizations.
+          files: release-assets/*.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -98,14 +98,14 @@ val releaseStorePasswordValue = env("NUVIO_RELEASE_STORE_PASSWORD")
 android {
     namespace = "com.nuvio.tv"
     compileSdk = 36
-    ndkVersion = "29.0.14206865"
+    // ndkVersion = "29.0.14206865"
 
     defaultConfig {
-        applicationId = "com.nuvio.tv"
+        applicationId = "dev.khayin.tv"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1050
-        versionName = "0.8.9-beta"
+        versionCode = 540
+        versionName = "5.4.0"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
@@ -183,15 +183,21 @@ android {
         create("release") {
             keyAlias = releaseKeyAliasValue
             keyPassword = releaseKeyPasswordValue
-            storeFile = releaseStoreFilePath?.let(::file) ?: file("../nuviotv.jks")
-            storePassword = releaseStorePasswordValue
+            val targetStore = releaseStoreFilePath?.let(::file) ?: file("../nuviotv.jks")
+            if (targetStore.exists()) {
+                storeFile = targetStore
+                storePassword = releaseStorePasswordValue
+            }
         }
     }
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("release")
-            isDebuggable = false
+            val relConfig = signingConfigs.getByName("release")
+            if (relConfig.storeFile?.exists() == true) {
+                signingConfig = relConfig
+            }
+            isDebuggable = true
             isMinifyEnabled = false
 
             buildConfigField("boolean", "IS_DEBUG_BUILD", "true")

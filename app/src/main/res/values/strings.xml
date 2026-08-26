@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Nuvio</string>
+    <string name="app_name">KhaYin TV</string>
     <string name="tv_channel_continue_watching">Continue Watching</string>
     <string name="type_movie">Movie</string>
     <string name="type_movies">Movies</string>
@@ -1986,8 +1986,8 @@
     <string name="official_server_description">You will be signed out of the custom server and the app will restart with the official service.</string>
     <string name="official_server_action">Use official server</string>
     <string name="custom_server_error_invalid_url">Enter a valid HTTP or HTTPS Backend URL.</string>
-    <string name="custom_server_error_official_active">api.nuvio.tv is the official server and is already selected.</string>
-    <string name="custom_server_error_official_available">api.nuvio.tv is the official server. Close this dialog and choose Use official server to switch back.</string>
+    <string name="custom_server_error_official_active">api.stream.khayin.net is the official server and is already selected.</string>
+    <string name="custom_server_error_official_available">api.stream.khayin.net is the official server. Close this dialog and choose Use official server to switch back.</string>
     <string name="custom_server_error_connection">Could not reach the discovery endpoint. Check the URL and server availability.</string>
     <string name="custom_server_error_http">The discovery endpoint returned HTTP %1$d.</string>
     <string name="custom_server_error_response_too_large">The discovery document is larger than allowed.</string>
