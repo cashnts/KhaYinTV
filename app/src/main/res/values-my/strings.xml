@@ -354,7 +354,7 @@
 
     <string name="about_title">အကြောင်းအရာ</string>
     <string name="about_subtitle">အက်ပ် အချက်အလက်များ၊ အဆင့်မြှင့်တင်မှုများနှင့် ဥပဒေရေးရာ လင့်ခ်များ</string>
-    <string name="about_made_with_love">Tapframe နှင့် မိတ်ဆွေများမှ ❤️ ဖြင့် ဖန်တီးထားသည်</string>
+    <string name="about_made_with_love">KhaYin အတွက် ❤️ ဖြင့် ဖန်တီးထားသည်</string>
     <string name="about_version">ဗားရှင်း %1$s</string>
     <string name="about_update_banner_title">အလိုအလျောက် အဆင့်မြှင့်တင်မှု ဘန်နာ</string>
     <string name="about_update_banner_subtitle">ဗားရှင်းအသစ် ရနိုင်သည့်အခါ ဘန်နာကို ပြသပါ</string>

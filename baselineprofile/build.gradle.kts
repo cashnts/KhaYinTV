@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.nuvio.tv.baselineprofile"
+    namespace = "dev.khayin.app.baselineprofile"
     compileSdk = 36
 
     defaultConfig {

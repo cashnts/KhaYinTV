@@ -96,16 +96,16 @@ val releaseStorePasswordValue = env("NUVIO_RELEASE_STORE_PASSWORD")
     ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD", "815787")
 
 android {
-    namespace = "com.nuvio.tv"
+    namespace = "dev.khayin.app"
     compileSdk = 36
     // ndkVersion = "29.0.14206865"
 
     defaultConfig {
-        applicationId = "dev.khayin.tv"
+        applicationId = "dev.khayin.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 540
-        versionName = "5.4.0"
+        versionCode = 1
+        versionName = "1.0.0"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
@@ -144,8 +144,8 @@ android {
         buildConfigField("String", "SENTRY_DSN", buildConfigString(sentryDsn))
 
         // In-app updater (GitHub Releases)
-        buildConfigField("String", "GITHUB_OWNER", "\"tapframe\"")
-        buildConfigField("String", "GITHUB_REPO", "\"NuvioTV\"")
+        buildConfigField("String", "GITHUB_OWNER", "\"cashnts\"")
+        buildConfigField("String", "GITHUB_REPO", "\"KhaYinTV\"")
     }
 
     flavorDimensions += "distribution"
@@ -161,7 +161,7 @@ android {
         }
         create("playstore") {
             dimension = "distribution"
-            applicationId = "com.nuvio.app"
+            applicationId = "dev.khayin.app.playstore"
             buildConfigField("boolean", "FEATURE_PLUGINS_ENABLED", "false")
             buildConfigField("boolean", "FEATURE_IN_APP_UPDATES_ENABLED", "false")
             buildConfigField("boolean", "FEATURE_IN_APP_TRAILERS_ENABLED", "false")
@@ -337,7 +337,7 @@ android {
 androidComponents {
     onVariants(selector().withBuildType("debug")) { variant ->
         val isPlaystore = variant.productFlavors.any { it.second == "playstore" }
-        variant.applicationId.set(if (isPlaystore) "com.nuvio.appdebug" else "com.nuviodebug.com")
+        variant.applicationId.set(if (isPlaystore) "dev.khayin.app.playstore.debug" else "dev.khayin.app.debug")
     }
 }
 
@@ -364,7 +364,7 @@ baselineProfile {
     mergeIntoMain = true
     baselineProfileOutputDir = "generated/baselineProfiles"
     filter {
-        include("com.nuvio.tv.**")
+        include("dev.khayin.app.**")
     }
 }
 
@@ -396,7 +396,7 @@ dependencies {
 
     // Source-retention nullness annotations (MonotonicNonNull / RequiresNonNull /
     // EnsuresNonNull) used by the vendored Matroska extractor in
-    // com.nuvio.tv.core.player.dvmkv. Media3 keeps these compileOnly in its own
+    // dev.khayin.app.core.player.dvmkv. Media3 keeps these compileOnly in its own
     // build, so they aren't on our classpath via the prebuilt AARs.
     compileOnly("org.checkerframework:checker-qual:3.43.0")
 
@@ -534,6 +534,7 @@ dependencies {
     implementation(libs.supabase.storage)
     implementation(libs.ktor.client.okhttp)
     implementation(libs.sentry.android)
+    implementation(libs.posthog.android)
 
     // Kotlinx Serialization
     implementation(libs.kotlinx.serialization.json)
