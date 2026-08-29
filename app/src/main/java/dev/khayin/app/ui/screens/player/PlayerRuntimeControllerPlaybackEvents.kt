@@ -817,13 +817,13 @@ internal fun PlayerRuntimeController.emitScrobbleStart() {
         val progressPercent = currentPlaybackProgressPercent()
         logScrobbleDiagnostic("start_dispatching", "requestGeneration=$requestGeneration progress=$progressPercent")
         PostHogAnalytics.trackPlaybackStarted(
-            mediaTitle = item.title,
-            contentType = item.type,
-            videoId = item.id,
-            season = item.season,
-            episode = item.episode,
-            durationMs = player?.duration ?: 0L,
-            positionMs = player?.currentPosition ?: 0L,
+            mediaTitle = item.title ?: title ?: "Unknown",
+            contentType = item.catalog?.contentType ?: contentType,
+            videoId = item.catalog?.videoId ?: currentVideoId,
+            season = item.episode?.season ?: currentSeason,
+            episode = item.episode?.number ?: currentEpisode,
+            durationMs = exoPlayer?.duration ?: 0L,
+            positionMs = exoPlayer?.currentPosition ?: 0L,
         )
         val failures = trackingScrobbleCoordinator.scrobble(
             action = TrackingScrobbleAction.START,
@@ -864,10 +864,10 @@ internal fun PlayerRuntimeController.emitScrobbleStop(progressPercent: Float? = 
     logScrobbleDiagnostic("stop_queued", "progress=$percent")
     val isCompleted = percent >= 80f
     PostHogAnalytics.trackPlaybackStopped(
-        mediaTitle = item.title,
-        videoId = item.id,
-        durationMs = player?.duration ?: 0L,
-        positionMs = player?.currentPosition ?: 0L,
+        mediaTitle = item.title ?: title ?: "Unknown",
+        videoId = item.catalog?.videoId ?: currentVideoId,
+        durationMs = exoPlayer?.duration ?: 0L,
+        positionMs = exoPlayer?.currentPosition ?: 0L,
         progressPercent = percent,
         completed = isCompleted,
     )
@@ -907,10 +907,10 @@ internal fun PlayerRuntimeController.emitScrobblePause(progressPercent: Float? =
     }
     logScrobbleDiagnostic("pause_queued", "progress=$percent")
     PostHogAnalytics.trackPlaybackPaused(
-        mediaTitle = item.title,
-        videoId = item.id,
-        durationMs = player?.duration ?: 0L,
-        positionMs = player?.currentPosition ?: 0L,
+        mediaTitle = item.title ?: title ?: "Unknown",
+        videoId = item.catalog?.videoId ?: currentVideoId,
+        durationMs = exoPlayer?.duration ?: 0L,
+        positionMs = exoPlayer?.currentPosition ?: 0L,
         progressPercent = percent,
     )
     scope.launch(kotlinx.coroutines.NonCancellable) {
