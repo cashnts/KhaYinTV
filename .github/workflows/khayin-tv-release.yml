@@ -90,7 +90,7 @@ jobs:
       - name: Configure Keystore & Environment Secrets
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.KHAYIN_RELEASE_KEYSTORE_BASE64 || secrets.RELEASE_KEYSTORE_BASE64 || secrets.NUVIO_RELEASE_KEYSTORE_BASE64 }}
-          KEY_ALIAS: ${{ secrets.KHAYIN_RELEASE_KEY_ALIAS || secrets.RELEASE_KEY_ALIAS || secrets.NUVIO_RELEASE_KEY_ALIAS || 'nuviotv' }}
+          KEY_ALIAS: ${{ secrets.KHAYIN_RELEASE_KEY_ALIAS || secrets.RELEASE_KEY_ALIAS || secrets.NUVIO_RELEASE_KEY_ALIAS || 'khayintv' }}
           KEY_PASSWORD: ${{ secrets.KHAYIN_RELEASE_KEY_PASSWORD || secrets.RELEASE_KEY_PASSWORD || secrets.NUVIO_RELEASE_KEY_PASSWORD || '815787' }}
           STORE_PASSWORD: ${{ secrets.KHAYIN_RELEASE_STORE_PASSWORD || secrets.RELEASE_STORE_PASSWORD || secrets.NUVIO_RELEASE_STORE_PASSWORD || '815787' }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN || 'https://03b275d4c26ccf95402bcd0a9a9f9b7f@o4511970100641792.ingest.us.sentry.io/4511970104705024' }}
@@ -110,6 +110,10 @@ jobs:
             echo "NUVIO_RELEASE_KEY_ALIAS=${KEY_ALIAS}" >> local.properties
             echo "NUVIO_RELEASE_KEY_PASSWORD=${KEY_PASSWORD}" >> local.properties
             echo "NUVIO_RELEASE_STORE_PASSWORD=${STORE_PASSWORD}" >> local.properties
+            echo "KHAYIN_RELEASE_STORE_FILE=$(pwd)/release.jks" >> local.properties
+            echo "KHAYIN_RELEASE_KEY_ALIAS=${KEY_ALIAS}" >> local.properties
+            echo "KHAYIN_RELEASE_KEY_PASSWORD=${KEY_PASSWORD}" >> local.properties
+            echo "KHAYIN_RELEASE_STORE_PASSWORD=${STORE_PASSWORD}" >> local.properties
             echo "Signing configured with provided keystore."
           else
             echo "CI_USE_DEBUG_SIGNING=true" >> "$GITHUB_ENV"

@@ -86,13 +86,21 @@ val useLocalFfmpegDecoder = truthy(
         ?: env("USE_LOCAL_FFMPEG_DECODER")
         ?: localProperties.getProperty("USE_LOCAL_FFMPEG_DECODER")
 )
-val releaseStoreFilePath = env("NUVIO_RELEASE_STORE_FILE")
+val releaseStoreFilePath = env("KHAYIN_RELEASE_STORE_FILE")
+    ?: env("NUVIO_RELEASE_STORE_FILE")
+    ?: localProperties.getProperty("KHAYIN_RELEASE_STORE_FILE")
     ?: localProperties.getProperty("NUVIO_RELEASE_STORE_FILE")
-val releaseKeyAliasValue = env("NUVIO_RELEASE_KEY_ALIAS")
-    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_ALIAS", "nuviotv")
-val releaseKeyPasswordValue = env("NUVIO_RELEASE_KEY_PASSWORD")
+val releaseKeyAliasValue = env("KHAYIN_RELEASE_KEY_ALIAS")
+    ?: env("NUVIO_RELEASE_KEY_ALIAS")
+    ?: localProperties.getProperty("KHAYIN_RELEASE_KEY_ALIAS")
+    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_ALIAS", "khayintv")
+val releaseKeyPasswordValue = env("KHAYIN_RELEASE_KEY_PASSWORD")
+    ?: env("NUVIO_RELEASE_KEY_PASSWORD")
+    ?: localProperties.getProperty("KHAYIN_RELEASE_KEY_PASSWORD")
     ?: localProperties.getProperty("NUVIO_RELEASE_KEY_PASSWORD", "815787")
-val releaseStorePasswordValue = env("NUVIO_RELEASE_STORE_PASSWORD")
+val releaseStorePasswordValue = env("KHAYIN_RELEASE_STORE_PASSWORD")
+    ?: env("NUVIO_RELEASE_STORE_PASSWORD")
+    ?: localProperties.getProperty("KHAYIN_RELEASE_STORE_PASSWORD")
     ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD", "815787")
 
 android {
@@ -183,7 +191,11 @@ android {
         create("release") {
             keyAlias = releaseKeyAliasValue
             keyPassword = releaseKeyPasswordValue
-            val targetStore = releaseStoreFilePath?.let(::file) ?: file("../nuviotv.jks")
+            val targetStore = releaseStoreFilePath?.let(::file)
+                ?: file("khayin-tv-release.jks").takeIf { it.exists() }
+                ?: file("../khayin-tv-release.jks").takeIf { it.exists() }
+                ?: file("../khayin-release.jks").takeIf { it.exists() }
+                ?: file("../nuviotv.jks")
             if (targetStore.exists()) {
                 storeFile = targetStore
                 storePassword = releaseStorePasswordValue
