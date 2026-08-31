@@ -1,7 +1,7 @@
 package dev.khayin.app.ui.components
 
 import androidx.compose.foundation.border
-import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Size
@@ -13,7 +13,7 @@ import dev.khayin.app.domain.model.CardDepthStyle
 import dev.khayin.app.domain.model.CardDepthSurface
 import dev.khayin.app.domain.model.DEFAULT_CARD_DEPTH_EDGE_COVERAGE
 
-val LocalCardDepthStyle = staticCompositionLocalOf { CardDepthStyle() }
+val LocalCardDepthStyle = compositionLocalOf { CardDepthStyle() }
 
 fun Modifier.nuvioCardDepth(
     shape: Shape,

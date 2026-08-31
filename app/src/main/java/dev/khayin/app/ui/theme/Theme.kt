@@ -12,6 +12,8 @@ import dev.khayin.app.domain.model.AppFont
 import dev.khayin.app.domain.model.AppTheme
 import dev.khayin.app.domain.model.SettingsUiStyle
 
+import androidx.compose.runtime.remember
+
 data class NuvioExtendedColors(
     val backgroundElevated: Color,
     val backgroundCard: Color,
@@ -58,39 +60,45 @@ fun NuvioTheme(
     settingsUiStyle: SettingsUiStyle = SettingsUiStyle.CLASSIC,
     content: @Composable () -> Unit
 ) {
-    val palette = ThemeColors.getColorPalette(appTheme)
-    val focusRingStyle = createFocusRingStyle(palette)
-    val colorScheme = NuvioColorScheme(
-        palette = palette,
-        amoledMode = amoledMode,
-        amoledSurfacesMode = amoledSurfacesMode
-    )
-    val typography = buildNuvioTypography(getFontFamily(appFont))
-    val textStyles = buildNuvioTextStyles(typography)
+    val palette = remember(appTheme) { ThemeColors.getColorPalette(appTheme) }
+    val focusRingStyle = remember(palette) { createFocusRingStyle(palette) }
+    val colorScheme = remember(palette, amoledMode, amoledSurfacesMode) {
+        NuvioColorScheme(
+            palette = palette,
+            amoledMode = amoledMode,
+            amoledSurfacesMode = amoledSurfacesMode
+        )
+    }
+    val typography = remember(appFont) { buildNuvioTypography(getFontFamily(appFont)) }
+    val textStyles = remember(typography) { buildNuvioTextStyles(typography) }
 
-    val materialColorScheme = darkColorScheme(
-        primary = colorScheme.Primary,
-        onPrimary = colorScheme.OnPrimary,
-        secondary = colorScheme.Secondary,
-        onSecondary = colorScheme.OnSecondary,
-        background = colorScheme.Background,
-        surface = colorScheme.Surface,
-        surfaceVariant = colorScheme.SurfaceVariant,
-        onBackground = colorScheme.TextPrimary,
-        onSurface = colorScheme.TextPrimary,
-        onSurfaceVariant = colorScheme.TextSecondary,
-        error = colorScheme.Error
-    )
+    val materialColorScheme = remember(colorScheme) {
+        darkColorScheme(
+            primary = colorScheme.Primary,
+            onPrimary = colorScheme.OnPrimary,
+            secondary = colorScheme.Secondary,
+            onSecondary = colorScheme.OnSecondary,
+            background = colorScheme.Background,
+            surface = colorScheme.Surface,
+            surfaceVariant = colorScheme.SurfaceVariant,
+            onBackground = colorScheme.TextPrimary,
+            onSurface = colorScheme.TextPrimary,
+            onSurfaceVariant = colorScheme.TextSecondary,
+            error = colorScheme.Error
+        )
+    }
 
-    val extendedColors = NuvioExtendedColors(
-        backgroundElevated = colorScheme.BackgroundElevated,
-        backgroundCard = colorScheme.BackgroundCard,
-        textSecondary = colorScheme.TextSecondary,
-        textTertiary = colorScheme.TextTertiary,
-        focusRing = colorScheme.FocusRing,
-        focusBackground = colorScheme.FocusBackground,
-        rating = colorScheme.Rating
-    )
+    val extendedColors = remember(colorScheme) {
+        NuvioExtendedColors(
+            backgroundElevated = colorScheme.BackgroundElevated,
+            backgroundCard = colorScheme.BackgroundCard,
+            textSecondary = colorScheme.TextSecondary,
+            textTertiary = colorScheme.TextTertiary,
+            focusRing = colorScheme.FocusRing,
+            focusBackground = colorScheme.FocusBackground,
+            rating = colorScheme.Rating
+        )
+    }
 
     CompositionLocalProvider(
         LocalNuvioColors provides colorScheme,

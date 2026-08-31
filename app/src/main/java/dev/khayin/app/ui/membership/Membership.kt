@@ -2,11 +2,11 @@ package dev.khayin.app.ui.membership
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.compositionLocalOf
 import dev.khayin.app.domain.model.MemberAccess
 import dev.khayin.app.domain.model.MemberTier
 
-val LocalMemberAccess = staticCompositionLocalOf { MemberAccess.None }
+val LocalMemberAccess = compositionLocalOf { MemberAccess.None }
 
 object Membership {
     val access: MemberAccess

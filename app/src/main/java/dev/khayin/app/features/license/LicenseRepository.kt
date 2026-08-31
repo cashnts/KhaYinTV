@@ -128,7 +128,7 @@ object LicenseRepository {
                 verifyRemoteLicense()
             }
             while (true) {
-                delay(30_000L) // 30s heartbeat interval
+                delay(30 * 60 * 1000L) // 30 mins heartbeat interval
                 if (_state.value is LicenseState.Active) {
                     verifyRemoteLicense()
                 }
@@ -296,7 +296,9 @@ object LicenseRepository {
                         _state.value = LicenseState.Expired(updated)
                     } else {
                         saveSecureLicensePayload(updated)
-                        _state.value = LicenseState.Active(updated)
+                        if (updated != currentInfo) {
+                            _state.value = LicenseState.Active(updated)
+                        }
                     }
                 }
             }

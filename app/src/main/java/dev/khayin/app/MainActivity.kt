@@ -347,7 +347,6 @@ class MainActivity : ComponentActivity() {
             val authState by authManager.authState.collectAsState()
             val licenseState by dev.khayin.app.features.license.LicenseRepository.state.collectAsState()
             val adminConfig by dev.khayin.app.features.license.AdminControlRepository.config.collectAsState()
-            val dismissedBroadcastTimestamp by dev.khayin.app.features.license.AdminControlRepository.dismissedBroadcastTimestamp.collectAsState()
             val context = LocalContext.current
 
             val activeProfileId by profileManager.activeProfileId.collectAsState()

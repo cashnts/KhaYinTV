@@ -120,7 +120,7 @@ object AdminControlRepository {
         pollingJob = scope.launch {
             fetchConfig()
             while (true) {
-                delay(10_000L) // poll service config every 10s for announcements / maintenance
+                delay(15 * 60 * 1000L) // Poll remote service config every 15 mins
                 fetchConfig()
             }
         }
@@ -163,7 +163,9 @@ object AdminControlRepository {
                     }.getOrNull()
 
                     if (parsed != null) {
-                        _config.value = parsed
+                        if (_config.value != parsed) {
+                            _config.value = parsed
+                        }
                         return parsed
                     }
                 }
