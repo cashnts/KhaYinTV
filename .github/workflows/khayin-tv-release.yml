@@ -1,22 +1,24 @@
-name: KhaYin TV Android Release Pipeline
+name: KhaYin TV Android Release & Cloudflare R2 Pipeline
 
 on:
   workflow_dispatch:
     inputs:
       version_override:
-        description: 'Optional version tag override (e.g. 5.4.0). Leave empty to use build.gradle.kts'
+        description: 'Optional version tag override (e.g. 1.0.2). Leave empty to use build.gradle.kts'
         required: false
         type: string
         default: ''
+      upload_to_r2:
+        description: 'Upload release artifacts to Cloudflare R2'
+        required: true
+        type: boolean
+        default: true
       create_github_release:
         description: 'Publish or update GitHub Release'
         required: true
         type: boolean
         default: true
   push:
-    branches:
-      - main
-      - dev
     tags:
       - 'v*'
 
@@ -35,6 +37,7 @@ jobs:
   metadata:
     name: Resolve Version Metadata
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     outputs:
       version: ${{ steps.version_step.outputs.version }}
       clean_version: ${{ steps.version_step.outputs.clean_version }}
@@ -52,7 +55,7 @@ jobs:
           else
             RAW_VERSION=$(grep 'versionName = ' app/build.gradle.kts | head -n 1 | cut -d'"' -f2 | tr -d ' \r\n')
             if [ -z "${RAW_VERSION}" ]; then
-              RAW_VERSION="5.4.0"
+              RAW_VERSION="1.0.2"
             fi
           fi
           
@@ -119,47 +122,102 @@ jobs:
 
       - name: Stage & Rename Release Artifacts
         run: |
-          mkdir -p artifacts
+          VERSION="${{ needs.metadata.outputs.version }}"
+          mkdir -p dist
+          
           APK_DIR="app/build/outputs/apk/full/release"
           if [ ! -d "$APK_DIR" ] || [ -z "$(ls -A "$APK_DIR" 2>/dev/null)" ]; then
             APK_DIR="app/build/outputs/apk/full/debug"
           fi
 
           echo "Collecting APKs from: $APK_DIR"
-          for apk in "$APK_DIR"/*.apk; do
-            if [ -f "$apk" ]; then
-              base=$(basename "$apk")
-              cp "$apk" "artifacts/KhaYinTV-${{ needs.metadata.outputs.clean_version }}-${base}"
-            fi
-          done
-          ls -la artifacts/
+          MAIN_APK=$(find "$APK_DIR" -type f -name "*.apk" 2>/dev/null | head -n 1)
+          FALLBACK_APK=$(find app/build/outputs/apk -type f -name "*.apk" 2>/dev/null | head -n 1)
+
+          if [ -n "$MAIN_APK" ] && [ -f "$MAIN_APK" ]; then
+            cp "$MAIN_APK" "dist/khayin-tv-v${VERSION}.apk"
+            echo "Renamed: $MAIN_APK -> dist/khayin-tv-v${VERSION}.apk"
+          elif [ -n "$FALLBACK_APK" ] && [ -f "$FALLBACK_APK" ]; then
+            cp "$FALLBACK_APK" "dist/khayin-tv-v${VERSION}.apk"
+            echo "Renamed fallback: $FALLBACK_APK -> dist/khayin-tv-v${VERSION}.apk"
+          else
+            echo "Error: No APK found!" >&2
+            exit 1
+          fi
+
+          ls -la dist/
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: khayin-tv-apks-${{ needs.metadata.outputs.clean_version }}
-          path: artifacts/*.apk
+          name: khayin-tv-artifacts
+          path: dist/*
           retention-days: 14
 
   # ---------------------------------------------------------------------------
-  # 3. Create GitHub Release
+  # 3. Upload to Cloudflare R2 & Create GitHub Release
   # ---------------------------------------------------------------------------
-  github-release:
-    name: Create GitHub Release
+  publish-release:
+    name: Upload to Cloudflare R2 & Publish Release
     needs: [metadata, build-tv]
     runs-on: ubuntu-latest
-    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.create_github_release == true)
+    if: always() && (needs.build-tv.result == 'success')
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
       - name: Download Built APKs
         uses: actions/download-artifact@v4
         with:
-          name: khayin-tv-apks-${{ needs.metadata.outputs.clean_version }}
-          path: release-assets/
+          name: khayin-tv-artifacts
+          path: release-files
+
+      - name: List Collected Release Files
+        run: |
+          echo "=== Collected Release Artifacts ==="
+          ls -la release-files/
+
+      # Upload to Cloudflare R2 using AWS CLI with custom S3 endpoint
+      - name: Upload to Cloudflare R2 Bucket
+        if: github.event_name == 'push' || inputs.upload_to_r2 != false
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          MISSING=0
+          if [ -z "${R2_ACCOUNT_ID}" ]; then echo "::warning ::Secret R2_ACCOUNT_ID is empty or not found in repository secrets."; MISSING=1; fi
+          if [ -z "${AWS_ACCESS_KEY_ID}" ]; then echo "::warning ::Secret R2_ACCESS_KEY_ID is empty or not found in repository secrets."; MISSING=1; fi
+          if [ -z "${AWS_SECRET_ACCESS_KEY}" ]; then echo "::warning ::Secret R2_SECRET_ACCESS_KEY is empty or not found in repository secrets."; MISSING=1; fi
+          if [ -z "${R2_BUCKET_NAME}" ]; then echo "::warning ::Secret R2_BUCKET_NAME is empty or not found in repository secrets."; MISSING=1; fi
+          
+          if [ "$MISSING" -eq 1 ]; then
+            echo "Error: Cloudflare R2 secrets are missing. Skipping R2 upload."
+            exit 1
+          fi
+
+          ENDPOINT_URL="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          TARGET_DIR="v${VERSION}"
+          
+          echo "Uploading release artifacts to Cloudflare R2: s3://${R2_BUCKET_NAME}/${TARGET_DIR}/"
+          
+          for file in release-files/*; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              echo "Uploading $filename -> s3://${R2_BUCKET_NAME}/${TARGET_DIR}/${filename}"
+              aws s3 cp "$file" "s3://${R2_BUCKET_NAME}/${TARGET_DIR}/${filename}" \
+                --endpoint-url "${ENDPOINT_URL}" \
+                --region auto
+            fi
+          done
+
+          echo "Upload complete! Contents in bucket folder v${VERSION}:"
+          aws s3 ls "s3://${R2_BUCKET_NAME}/${TARGET_DIR}/" --endpoint-url "${ENDPOINT_URL}" --region auto || true
 
       - name: Create or Update GitHub Release
+        if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.create_github_release != false)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.metadata.outputs.clean_version }}
@@ -175,7 +233,7 @@ jobs:
             - **Rich Genre Catalogs**: Action, Animation, Comedy, Crime, Documentary, Drama, Family, Fantasy, Horror, Mystery, Romance, Sci-Fi, Thriller, and more.
             - **Multilingual & Burmese**: Complete Myanmar (Burmese) localization.
             - **High Performance Playback**: Media3 player engine with automatic fallback & streaming optimizations.
-          files: release-assets/*.apk
+          files: release-files/*
           draft: false
           prerelease: false
         env:
