@@ -100,7 +100,7 @@ object StreamAutoPlaySelector {
 
         return when (mode) {
             StreamAutoPlayMode.MANUAL -> null
-            StreamAutoPlayMode.FIRST_STREAM -> candidateStreams.firstOrNull { isPlayable(it) }
+            StreamAutoPlayMode.FIRST_STREAM -> candidateStreams.filter { isPlayable(it) }.maxByOrNull { calculateQualityScore(it) }
             StreamAutoPlayMode.REGEX_MATCH -> {
                 val pattern = regexPattern.trim()
  
@@ -146,9 +146,71 @@ object StreamAutoPlaySelector {
                 }
 
                 if (matchingStreams.isEmpty()) return null
-                matchingStreams.firstOrNull { isPlayable(it) }
+                matchingStreams.maxByOrNull { calculateQualityScore(it) }
             }
-
         }
+    }
+
+    fun calculateQualityScore(stream: Stream): Long {
+        var score = 0L
+        val text = buildString {
+            append(stream.name.orEmpty()).append(' ')
+            append(stream.title.orEmpty()).append(' ')
+            append(stream.description.orEmpty()).append(' ')
+            append(stream.behaviorHints?.filename.orEmpty())
+        }.lowercase()
+
+        // 1. Cached vs Uncached
+        val isUncached = stream.debridCacheStatus?.state == StreamDebridCacheState.NOT_CACHED ||
+            listOf(
+                "uncached", "not cached", "not_cached", "non-cached", "[download]", "(download)",
+                "downloading", "[dl]", "⏳", "❌", "caching in progress", "[rd download]", "[tb download]"
+            ).any { text.contains(it) } || Regex("""(?i)\[(?:rd|ad|pm|tb|torbox)\](?!\+)""").containsMatchIn(text)
+
+        val isConfirmedCached = !isUncached && (
+            stream.isDirectDebrid() ||
+            stream.debridCacheStatus?.state == StreamDebridCacheState.CACHED ||
+            listOf("[rd+]", "[ad+]", "[pm+]", "[tb+]", "[torbox+]", "[debrid+]", "[realdebrid+]", "[cached]", "⚡", "instant", "[ready]").any { text.contains(it) }
+        )
+
+        if (isUncached) {
+            score -= 10_000_000L
+        } else if (isConfirmedCached) {
+            score += 1_000_000L
+        }
+
+        // 2. Low quality penalty
+        if (listOf("camrip", "hdcam", "telesync", "hdts", "screener", "cam-rip", "ts-rip", "hdtc").any { text.contains(it) }) {
+            score -= 5_000_000L
+        }
+
+        // 3. Direct playable URL
+        if (!stream.getStreamUrl().isNullOrBlank()) {
+            score += 100_000L
+        }
+
+        // 4. Resolution
+        when {
+            Regex("""(?i)\b(2160p?|4k|uhd)\b""").containsMatchIn(text) -> score += 40_000L
+            Regex("""(?i)\b(1440p?|2k|qhd)\b""").containsMatchIn(text) -> score += 30_000L
+            Regex("""(?i)\b(1080p?|fhd)\b""").containsMatchIn(text) -> score += 20_000L
+            Regex("""(?i)\b(720p?|hd)\b""").containsMatchIn(text) && !text.contains("hdr") && !text.contains("truehd") -> score += 10_000L
+        }
+
+        // 5. Codec
+        when {
+            text.contains("av1") -> score += 15_000L
+            text.contains("hevc") || text.contains("x265") || text.contains("h.265") -> score += 12_000L
+            text.contains("x264") || text.contains("h.264") -> score += 8_000L
+        }
+
+        // 6. Audio
+        if (text.contains("atmos") || text.contains("truehd") || text.contains("dts-hd") || text.contains("dts:x")) {
+            score += 8_000L
+        } else if (text.contains("5.1") || text.contains("7.1")) {
+            score += 4_000L
+        }
+
+        return score
     }
 }
