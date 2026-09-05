@@ -37,9 +37,10 @@ object PostHogAnalytics {
             }
 
             PostHogLogger.start()
+            PostHogTracer.start()
             installUncaughtExceptionHandler()
 
-            Log.i(TAG, "PostHog initialized with Error Tracking & Session Replay on ${deviceInfo.platform} (${deviceInfo.deviceType}, distinctId=$savedKey)")
+            Log.i(TAG, "PostHog initialized with Error Tracking, Tracing & Session Replay on ${deviceInfo.platform} (${deviceInfo.deviceType}, distinctId=$savedKey)")
             log(level = "INFO", tag = "AppLifecycle", message = "KhaYin ${deviceInfo.platform} started (type=${deviceInfo.deviceType}, distinctId=$savedKey)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize PostHog", e)
@@ -60,6 +61,7 @@ object PostHogAnalytics {
                 )
                 PostHog.flush()
                 PostHogLogger.flush()
+                PostHogTracer.flush()
             } catch (e: Exception) {
                 Log.e(TAG, "Error logging uncaught exception to PostHog", e)
             } finally {

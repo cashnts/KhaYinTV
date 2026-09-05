@@ -81,7 +81,7 @@ jobs:
             IS_RELEASE="true"
           else
             CHANNEL="dev"
-            TARGET_DIR="dev/v${CLEAN_VERSION}"
+            TARGET_DIR="dev/${CLEAN_VERSION}"
             IS_RELEASE="false"
           fi
 
