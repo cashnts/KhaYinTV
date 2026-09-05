@@ -90,9 +90,11 @@ object PostHogLogger {
             else -> 9 to "INFO"
         }
 
+        val deviceInfo = DeviceDetector.getDeviceInfo()
         val enrichedAttributes = mutableMapOf<String, Any>()
         enrichedAttributes["tag"] = tag
-        enrichedAttributes["platform"] = "Android TV"
+        enrichedAttributes["platform"] = deviceInfo.platform
+        enrichedAttributes["device.type"] = deviceInfo.deviceType
         
         val distinctId = LicenseStorage.loadLastKnownKey()?.takeIf { it.isNotBlank() }
         if (distinctId != null) {
@@ -172,13 +174,18 @@ object PostHogLogger {
     }
 
     private fun buildOtlpPayload(records: List<LogRecord>): JSONObject {
+        val deviceInfo = DeviceDetector.getDeviceInfo()
         val resourceAttrs = JSONArray().apply {
             put(buildAttr("service.name", "khayin-tv"))
             put(buildAttr("service.version", BuildConfig.VERSION_NAME))
             put(buildAttr("deployment.environment", if (BuildConfig.DEBUG) "debug" else "production"))
-            put(buildAttr("os.version", Build.VERSION.RELEASE ?: "unknown"))
-            put(buildAttr("device.model", Build.MODEL ?: "unknown"))
-            put(buildAttr("device.brand", Build.BRAND ?: "unknown"))
+            put(buildAttr("os.name", deviceInfo.osName))
+            put(buildAttr("os.version", deviceInfo.osVersion))
+            put(buildAttr("device.type", deviceInfo.deviceType))
+            put(buildAttr("device.platform", deviceInfo.platform))
+            put(buildAttr("device.model", deviceInfo.model))
+            put(buildAttr("device.brand", deviceInfo.brand))
+            put(buildAttr("device.manufacturer", deviceInfo.manufacturer))
         }
 
         val logRecords = JSONArray()

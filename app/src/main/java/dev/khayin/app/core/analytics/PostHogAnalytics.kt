@@ -16,6 +16,8 @@ object PostHogAnalytics {
 
     fun start(application: Application) {
         try {
+            DeviceDetector.init(application)
+            val deviceInfo = DeviceDetector.getDeviceInfo(application)
             val config = PostHogAndroidConfig(
                 apiKey = API_KEY,
                 host = HOST
@@ -37,8 +39,8 @@ object PostHogAnalytics {
             PostHogLogger.start()
             installUncaughtExceptionHandler()
 
-            Log.i(TAG, "PostHog initialized with Error Tracking & Session Replay on TV (distinctId=$savedKey)")
-            log(level = "INFO", tag = "AppLifecycle", message = "KhaYin TV started (distinctId=$savedKey)")
+            Log.i(TAG, "PostHog initialized with Error Tracking & Session Replay on ${deviceInfo.platform} (${deviceInfo.deviceType}, distinctId=$savedKey)")
+            log(level = "INFO", tag = "AppLifecycle", message = "KhaYin ${deviceInfo.platform} started (type=${deviceInfo.deviceType}, distinctId=$savedKey)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize PostHog", e)
         }
@@ -71,8 +73,14 @@ object PostHogAnalytics {
         properties: Map<String, Any>? = null
     ) {
         try {
+            val deviceInfo = DeviceDetector.getDeviceInfo()
             val enrichedProps = (properties ?: emptyMap()).toMutableMap()
-            enrichedProps["platform"] = "Android TV"
+            enrichedProps["platform"] = deviceInfo.platform
+            enrichedProps["device_type"] = deviceInfo.deviceType
+            enrichedProps["os_name"] = deviceInfo.osName
+            enrichedProps["os_version"] = deviceInfo.osVersion
+            enrichedProps["device_model"] = deviceInfo.model
+            enrichedProps["device_brand"] = deviceInfo.brand
             PostHog.capture(event, properties = enrichedProps)
         } catch (e: Exception) {
             Log.w(TAG, "PostHog capture failed: $event", e)
@@ -122,8 +130,10 @@ object PostHogAnalytics {
 
             // If error/fatal, also report into PostHog Error Tracking ($exception)
             if (level.equals("ERROR", ignoreCase = true) || level.equals("FATAL", ignoreCase = true) || throwable != null) {
+                val deviceInfo = DeviceDetector.getDeviceInfo()
                 val exProps = (properties ?: emptyMap()).toMutableMap()
-                exProps["platform"] = "Android TV"
+                exProps["platform"] = deviceInfo.platform
+                exProps["device_type"] = deviceInfo.deviceType
                 exProps["\$exception_message"] = throwable?.message ?: message
                 exProps["\$exception_type"] = throwable?.let { it::class.java.name } ?: "ApplicationError"
                 exProps["tag"] = tag
@@ -145,8 +155,10 @@ object PostHogAnalytics {
         properties: Map<String, Any>? = null
     ) {
         try {
+            val deviceInfo = DeviceDetector.getDeviceInfo()
             val exProps = (properties ?: emptyMap()).toMutableMap()
-            exProps["platform"] = "Android TV"
+            exProps["platform"] = deviceInfo.platform
+            exProps["device_type"] = deviceInfo.deviceType
             exProps["tag"] = tag
             exProps["\$exception_type"] = throwable.javaClass.name
             exProps["\$exception_message"] = throwable.message ?: throwable.javaClass.simpleName
@@ -168,8 +180,10 @@ object PostHogAnalytics {
 
     fun screen(screenName: String, properties: Map<String, Any>? = null) {
         try {
+            val deviceInfo = DeviceDetector.getDeviceInfo()
             val enrichedProps = (properties ?: emptyMap()).toMutableMap()
-            enrichedProps["platform"] = "Android TV"
+            enrichedProps["platform"] = deviceInfo.platform
+            enrichedProps["device_type"] = deviceInfo.deviceType
             PostHog.screen(screenName, properties = enrichedProps)
         } catch (e: Exception) {
             Log.w(TAG, "PostHog screen failed: $screenName", e)
