@@ -1594,6 +1594,14 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
         Log.d(PlayerRuntimeController.TAG, "AUTO_SUB stop: user explicitly selected current subtitle")
         return
     }
+    if (subtitleAddonRestoredByPersistedPreference) {
+        Log.d(PlayerRuntimeController.TAG, "AUTO_SUB stop: persisted addon subtitle already restored")
+        return
+    }
+    if (subtitleDisabledByPersistedPreference) {
+        Log.d(PlayerRuntimeController.TAG, "AUTO_SUB stop: subtitle disabled by user preference")
+        return
+    }
     val state = _uiState.value
     val preferredTargets = subtitleLanguageTargets()
     val primaryTarget = preferredTargets.firstOrNull()
