@@ -43,7 +43,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import dev.khayin.app.core.network.IPv4FirstDns
-import dev.khayin.app.core.diagnostics.SentryNetworkBreadcrumbInterceptor
+import dev.khayin.app.core.diagnostics.PostHogNetworkLogInterceptor
 import java.io.File
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
@@ -123,7 +123,7 @@ object NetworkModule {
                     .build()
                 chain.proceed(request)
             }
-            .addInterceptor(SentryNetworkBreadcrumbInterceptor())
+            .addInterceptor(PostHogNetworkLogInterceptor())
             // Prevent OkHttp from caching error responses (4xx/5xx).
             .addNetworkInterceptor { chain ->
                 val response = chain.proceed(chain.request())
@@ -177,7 +177,7 @@ object NetworkModule {
                     .build()
                 chain.proceed(request)
             }
-            .addInterceptor(SentryNetworkBreadcrumbInterceptor())
+            .addInterceptor(PostHogNetworkLogInterceptor())
             .build()
 
     @Provides

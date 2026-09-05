@@ -120,7 +120,6 @@ jobs:
           KEY_ALIAS: ${{ secrets.KHAYIN_RELEASE_KEY_ALIAS || secrets.RELEASE_KEY_ALIAS || secrets.NUVIO_RELEASE_KEY_ALIAS || 'khayintv' }}
           KEY_PASSWORD: ${{ secrets.KHAYIN_RELEASE_KEY_PASSWORD || secrets.RELEASE_KEY_PASSWORD || secrets.NUVIO_RELEASE_KEY_PASSWORD || '815787' }}
           STORE_PASSWORD: ${{ secrets.KHAYIN_RELEASE_STORE_PASSWORD || secrets.RELEASE_STORE_PASSWORD || secrets.NUVIO_RELEASE_STORE_PASSWORD || '815787' }}
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN || 'https://03b275d4c26ccf95402bcd0a9a9f9b7f@o4511970100641792.ingest.us.sentry.io/4511970104705024' }}
         run: |
           mkdir -p ~/.gradle
           # Optimized Gradle properties for GitHub Actions Ubuntu Runners (7GB physical RAM)
@@ -136,7 +135,6 @@ jobs:
           sdk.dir=/usr/local/lib/android/sdk
           USE_LOCAL_FFMPEG_DECODER=false
           EOF
-          echo "SENTRY_DSN=${SENTRY_DSN}" >> local.properties
 
           if [ -n "${RELEASE_KEYSTORE_BASE64}" ]; then
             echo "${RELEASE_KEYSTORE_BASE64}" | base64 -d > release.jks

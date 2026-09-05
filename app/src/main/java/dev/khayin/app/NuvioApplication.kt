@@ -18,7 +18,8 @@ import coil3.request.allowRgb565
 import coil3.bitmapFactoryMaxParallelism
 
 import okio.Path.Companion.toOkioPath
-import dev.khayin.app.core.diagnostics.SentryInitializer
+import dev.khayin.app.core.analytics.PostHogAnalytics
+import dev.khayin.app.core.analytics.PostHogLogger
 import dev.khayin.app.core.image.StaleWhileRevalidateCacheStrategy
 import dev.khayin.app.core.runtime.PluginRuntimeHooks
 import dev.khayin.app.core.sync.StartupSyncService
@@ -27,6 +28,10 @@ import dev.khayin.app.core.network.IPv4FirstDns
 import dev.khayin.app.data.local.SentrySettingsDataStore
 import dev.khayin.app.data.simkl.SimklAnimeIdPreferenceHolder
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
@@ -42,6 +47,8 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
     @Inject lateinit var androidTvChannelSyncService: AndroidTvChannelSyncService
     @Inject lateinit var sentrySettingsDataStore: SentrySettingsDataStore
     @Inject lateinit var simklAnimeIdPreferenceHolder: SimklAnimeIdPreferenceHolder
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     companion object {
         /**
@@ -75,8 +82,12 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
-        SentryInitializer.start(this, sentrySettingsDataStore)
-        dev.khayin.app.core.analytics.PostHogAnalytics.start(this)
+        PostHogAnalytics.start(this)
+        appScope.launch {
+            sentrySettingsDataStore.enabled.collect { enabled ->
+                PostHogLogger.isEnabled = enabled
+            }
+        }
         PluginRuntimeHooks.onApplicationCreate(this)
         androidTvChannelSyncService.start()
         // Load locale synchronously so it's available before Activity.attachBaseContext.

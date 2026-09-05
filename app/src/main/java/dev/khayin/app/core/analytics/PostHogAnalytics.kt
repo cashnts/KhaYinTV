@@ -5,11 +5,14 @@ import android.util.Log
 import com.posthog.PostHog
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
+import dev.khayin.app.features.license.LicenseStorage
 
 object PostHogAnalytics {
     private const val TAG = "PostHogAnalytics"
     const val API_KEY = "phc_BbmKpZksuoFxSHLj5PS8tbZttzcwkFU82AsQdyLiTsrd"
     const val HOST = "https://us.i.posthog.com"
+
+    private var uncaughtHandlerInstalled = false
 
     fun start(application: Application) {
         try {
@@ -21,13 +24,41 @@ object PostHogAnalytics {
                 captureScreenViews = true
             }
             PostHogAndroid.setup(application, config)
-            val savedKey = dev.khayin.app.features.license.LicenseStorage.loadLastKnownKey()?.takeIf { it.isNotBlank() }
+            val savedKey = LicenseStorage.loadLastKnownKey()?.takeIf { it.isNotBlank() }
             if (savedKey != null) {
                 PostHog.identify(savedKey)
             }
+
+            PostHogLogger.start()
+            installUncaughtExceptionHandler()
+
             Log.i(TAG, "PostHog initialized successfully on TV (distinctId=$savedKey)")
+            log(level = "INFO", tag = "AppLifecycle", message = "KhaYin TV started (distinctId=$savedKey)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize PostHog", e)
+        }
+    }
+
+    private fun installUncaughtExceptionHandler() {
+        if (uncaughtHandlerInstalled) return
+        uncaughtHandlerInstalled = true
+        val originalHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                log(
+                    level = "FATAL",
+                    tag = "Crash",
+                    message = "Uncaught exception on thread ${thread.name}: ${throwable.message}",
+                    throwable = throwable
+                )
+                captureException(throwable, tag = "UncaughtCrash", properties = mapOf("thread_name" to thread.name))
+                PostHog.flush()
+                PostHogLogger.flush()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error logging uncaught exception to PostHog", e)
+            } finally {
+                originalHandler?.uncaughtException(thread, throwable)
+            }
         }
     }
 
@@ -52,6 +83,22 @@ object PostHogAnalytics {
         }
     }
 
+    fun d(tag: String, message: String, properties: Map<String, Any>? = null) {
+        log(level = "DEBUG", tag = tag, message = message, properties = properties)
+    }
+
+    fun i(tag: String, message: String, properties: Map<String, Any>? = null) {
+        log(level = "INFO", tag = tag, message = message, properties = properties)
+    }
+
+    fun w(tag: String, message: String, throwable: Throwable? = null, properties: Map<String, Any>? = null) {
+        log(level = "WARN", tag = tag, message = message, throwable = throwable, properties = properties)
+    }
+
+    fun e(tag: String, message: String, throwable: Throwable? = null, properties: Map<String, Any>? = null) {
+        log(level = "ERROR", tag = tag, message = message, throwable = throwable, properties = properties)
+    }
+
     fun log(
         level: String = "INFO",
         tag: String = "App",
@@ -60,17 +107,17 @@ object PostHogAnalytics {
         properties: Map<String, Any>? = null
     ) {
         try {
-            val logProps = (properties ?: emptyMap()).toMutableMap()
-            logProps["platform"] = "Android TV"
-            logProps["\$level"] = level.lowercase()
-            logProps["\$message"] = message
-            logProps["tag"] = tag
-            if (throwable != null) {
-                logProps["error_message"] = throwable.message ?: ""
-                logProps["stack_trace"] = throwable.stackTraceToString().take(2000)
-            }
-            PostHog.capture("\$log", properties = logProps)
-            if (level.equals("ERROR", ignoreCase = true) || throwable != null) {
+            // Forward to PostHog Logs (OTLP)
+            PostHogLogger.log(
+                level = level,
+                tag = tag,
+                message = message,
+                throwable = throwable,
+                attributes = properties
+            )
+
+            // If error/fatal, also capture exception in PostHog Analytics
+            if (level.equals("ERROR", ignoreCase = true) || level.equals("FATAL", ignoreCase = true) || throwable != null) {
                 val exProps = (properties ?: emptyMap()).toMutableMap()
                 exProps["platform"] = "Android TV"
                 exProps["\$exception_message"] = throwable?.message ?: message
@@ -226,6 +273,12 @@ object PostHogAnalytics {
                 put("error_message", errorMessage)
                 if (sourceUrl != null) put("source_url", sourceUrl.take(300))
             }
+        )
+        log(
+            level = "ERROR",
+            tag = "Player",
+            message = "Playback failed for '$mediaTitle': $errorMessage",
+            properties = mapOf("video_id" to (videoId ?: ""), "source_url" to (sourceUrl ?: ""))
         )
     }
 
@@ -383,24 +436,6 @@ object PostHogAnalytics {
             throwable = throwable,
             properties = props
         )
-        try {
-            if (io.sentry.Sentry.isEnabled()) {
-                val sentryEvent = io.sentry.SentryEvent(throwable ?: Exception("SubtitleError[$errorType]: $errorMessage")).apply {
-                    level = io.sentry.SentryLevel.ERROR
-                    setTag("feature", "subtitle")
-                    setTag("subtitle.error_type", errorType)
-                    if (language != null) setTag("subtitle.language", language)
-                    if (addonName != null) setTag("subtitle.addon", addonName)
-                    if (mimeType != null) setTag("subtitle.mime_type", mimeType)
-                    setExtra("subtitle_url", subtitleUrl?.take(300) ?: "")
-                    setExtra("subtitle_id", subtitleId ?: "")
-                    extra?.forEach { (k, v) -> setExtra(k, v) }
-                }
-                io.sentry.Sentry.captureEvent(sentryEvent)
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Sentry subtitle error capture failed", e)
-        }
     }
 
     fun reset() {
@@ -411,4 +446,3 @@ object PostHogAnalytics {
         }
     }
 }
-
