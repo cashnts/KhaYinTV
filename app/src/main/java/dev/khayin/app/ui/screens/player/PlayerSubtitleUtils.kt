@@ -366,5 +366,18 @@ object PlayerSubtitleUtils {
             else -> isEnglish || isChinese
         }
     }
+
+    /**
+     * Strips query parameters from static subtitle URLs (such as stream.khayin.net ?extra=...)
+     * where query strings cause the upstream CDN to return a truncated 30-cue sample instead of the full file.
+     */
+    fun cleanSubtitleUrl(url: String): String {
+        val trimmed = url.trim()
+        if (trimmed.contains("stream.khayin.net", ignoreCase = true) && trimmed.contains("?extra=", ignoreCase = true)) {
+            return trimmed.substringBefore("?")
+        }
+        return trimmed
+    }
 }
+
 

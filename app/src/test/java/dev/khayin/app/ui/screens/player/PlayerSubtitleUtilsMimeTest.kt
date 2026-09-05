@@ -21,6 +21,17 @@ class PlayerSubtitleUtilsMimeTest {
     }
 
     @Test
+    fun cleanSubtitleUrl_stripsExtraQueryFromKhaYinServer() {
+        val raw = "https://stream.khayin.net/subtitles/vtt/movie/tt32642706.vtt?extra=videoHash%3D43f1a7366cb275ab%26videoSize%3D19792829948"
+        val clean = PlayerSubtitleUtils.cleanSubtitleUrl(raw)
+        assertEquals("https://stream.khayin.net/subtitles/vtt/movie/tt32642706.vtt", clean)
+
+        val regular = "https://opensubtitles.org/sub.vtt?token=123"
+        assertEquals(regular, PlayerSubtitleUtils.cleanSubtitleUrl(regular))
+    }
+
+
+    @Test
     fun sniffSubtitleMimeType_detectsWebVttHeader() {
         val body = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHi"
         assertEquals(

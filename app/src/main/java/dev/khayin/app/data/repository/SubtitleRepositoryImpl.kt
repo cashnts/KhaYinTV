@@ -225,7 +225,8 @@ class SubtitleRepositoryImpl @Inject constructor(
             when (val result = safeApiCall(context) { api.getSubtitles(subtitleUrl) }) {
                 is NetworkResult.Success -> {
                     val subtitles = result.data.subtitles?.mapNotNull { dto ->
-                        val url = dto.url?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                        val rawUrl = dto.url?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                        val url = dev.khayin.app.ui.screens.player.PlayerSubtitleUtils.cleanSubtitleUrl(rawUrl)
                         val lang = dto.lang?.takeIf { it.isNotBlank() } ?: dto.language?.takeIf { it.isNotBlank() } ?: "und"
                         val subId = dto.id?.takeIf { it.isNotBlank() } ?: "$lang-${url.hashCode()}"
                         Subtitle(

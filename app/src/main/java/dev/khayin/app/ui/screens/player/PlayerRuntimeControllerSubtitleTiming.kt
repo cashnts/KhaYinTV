@@ -228,8 +228,9 @@ internal suspend fun PlayerRuntimeController.downloadSubtitleBody(url: String, l
 
 
 private fun PlayerRuntimeController.executeSubtitleDownload(url: String, languageHint: String? = null): String {
-    val requestBuilder = Request.Builder().url(url)
-    val subtitleHost = runCatching { android.net.Uri.parse(url).host }.getOrNull()
+    val cleanUrl = PlayerSubtitleUtils.cleanSubtitleUrl(url)
+    val requestBuilder = Request.Builder().url(cleanUrl)
+    val subtitleHost = runCatching { android.net.Uri.parse(cleanUrl).host }.getOrNull()
     val streamHost = runCatching { android.net.Uri.parse(currentStreamUrl).host }.getOrNull()
     val sameHost = !subtitleHost.isNullOrBlank() &&
         subtitleHost.equals(streamHost, ignoreCase = true)
