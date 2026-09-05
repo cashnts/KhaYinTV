@@ -92,6 +92,8 @@ private val OverlayOutlineColors = listOf(
 
 private const val RailFadeDurationMs = 120
 
+private var persistedStyleFocusKey: String? = null
+
 @Composable
 internal fun SubtitleSelectionOverlay(
     visible: Boolean,
@@ -114,14 +116,20 @@ internal fun SubtitleSelectionOverlay(
     val unknownLabel = stringResource(R.string.subtitle_language_unknown)
     val builtInLabel = stringResource(R.string.subtitle_built_in)
     val forcedLabel = stringResource(R.string.sub_forced_lang)
-    var persistedStyleFocusKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val isPlus = remember(visible) { dev.khayin.app.features.license.LicenseRepository.isPlusMember }
     val sessionPreferredLanguage = remember(visible) { subtitleStyle.preferredLanguage }
     val sessionSecondaryPreferredLanguage = remember(visible) { subtitleStyle.secondaryPreferredLanguage }
     val sessionShowOnlyPreferredLanguages = remember(visible) { subtitleStyle.showOnlyPreferredLanguages }
     val sessionSelectedInternalIndex = remember(visible) { selectedInternalIndex }
-    val sessionInternalTracks = remember(visible) { internalTracks.map(TrackInfo::copy) }
-    val sessionAddonSubtitles = remember(visible, addonSubtitles) { addonSubtitles.map(Subtitle::copy) }
-    val sessionSelectedAddonSubtitle = remember(visible) { selectedAddonSubtitle?.copy() }
+    val sessionInternalTracks = remember(visible, isPlus) {
+        internalTracks.filter { PlayerSubtitleUtils.isAllowedSubtitleTrack(it, isPlus) }.map(TrackInfo::copy)
+    }
+    val sessionAddonSubtitles = remember(visible, addonSubtitles, isPlus) {
+        addonSubtitles.filter { PlayerSubtitleUtils.isAllowedAddonSubtitle(it, isPlus) }.map(Subtitle::copy)
+    }
+    val sessionSelectedAddonSubtitle = remember(visible, isPlus) {
+        selectedAddonSubtitle?.takeIf { PlayerSubtitleUtils.isAllowedAddonSubtitle(it, isPlus) }?.copy()
+    }
     val sessionInstalledSubtitleAddonOrder = remember(visible) { installedSubtitleAddonOrder.toList() }
     val sessionIsLoadingAddons = isLoadingAddons
     val sessionSelectedSubtitleLanguageKey = remember(visible) {
@@ -131,7 +139,7 @@ internal fun SubtitleSelectionOverlay(
             selectedAddonSubtitle = sessionSelectedAddonSubtitle
         )
     }
-    val languageItems = remember(visible, sessionAddonSubtitles) {
+    val languageItems = remember(visible, sessionAddonSubtitles, isPlus) {
         buildSubtitleLanguageRailItems(
             internalTracks = sessionInternalTracks,
             addonSubtitles = sessionAddonSubtitles,
@@ -140,7 +148,8 @@ internal fun SubtitleSelectionOverlay(
             showOnlyPreferredLanguages = sessionShowOnlyPreferredLanguages,
             currentLanguageKey = sessionSelectedSubtitleLanguageKey,
             noneLabel = noneLabel,
-            unknownLabel = unknownLabel
+            unknownLabel = unknownLabel,
+            isPlus = isPlus
         )
     }
     val sessionInitialLanguageKey = remember(visible, languageItems, sessionSelectedSubtitleLanguageKey) {
@@ -1685,17 +1694,22 @@ private fun buildSubtitleLanguageRailItems(
     showOnlyPreferredLanguages: Boolean,
     currentLanguageKey: String,
     noneLabel: String,
-    unknownLabel: String
+    unknownLabel: String,
+    isPlus: Boolean
 ): List<SubtitleLanguageRailItem> {
     val counts = linkedMapOf<String, Int>()
-    internalTracks.forEach { track ->
-        val key = normalizeOverlayLanguageKeyForTrack(track)
-        counts[key] = (counts[key] ?: 0) + 1
-    }
-    addonSubtitles.forEach { subtitle ->
-        val key = normalizeOverlayLanguageKey(subtitle.lang)
-        counts[key] = (counts[key] ?: 0) + 1
-    }
+    internalTracks
+        .filter { PlayerSubtitleUtils.isAllowedSubtitleTrack(it, isPlus) }
+        .forEach { track ->
+            val key = normalizeOverlayLanguageKeyForTrack(track)
+            counts[key] = (counts[key] ?: 0) + 1
+        }
+    addonSubtitles
+        .filter { PlayerSubtitleUtils.isAllowedAddonSubtitle(it, isPlus) }
+        .forEach { subtitle ->
+            val key = normalizeOverlayLanguageKey(subtitle.lang)
+            counts[key] = (counts[key] ?: 0) + 1
+        }
 
     val preferredOrder = preferredOverlayLanguageOrder(
         preferredLanguage = preferredLanguage,

@@ -6,7 +6,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.text.Cue
 import dev.khayin.app.ui.util.LANGUAGE_OVERRIDES
 
-internal object PlayerSubtitleUtils {
+object PlayerSubtitleUtils {
     fun normalizeLanguageCode(lang: String): String {
         val code = lang.trim().lowercase()
         if (code.isBlank()) return ""
@@ -211,28 +211,160 @@ internal object PlayerSubtitleUtils {
         ).toList()
     }
 
-    /**
-     * Merges simultaneously active unpositioned text cues into a single multi-line cue
-     * to prevent Media3 SubtitlePainter from drawing colliding lines on top of each other.
-     */
     fun mergeOverlappingCues(cues: List<Cue>): List<Cue> {
-        if (cues.size <= 1 || !cues.all { it.bitmap == null && it.line == Cue.DIMEN_UNSET }) {
-            return cues
-        }
-        val validTexts = cues.mapNotNull { it.text }.filter { it.isNotBlank() }
-        if (validTexts.isEmpty()) return emptyList()
-
-        val hasSpanned = validTexts.any { it is Spanned }
-        val mergedText: CharSequence = if (hasSpanned) {
-            val builder = SpannableStringBuilder()
-            for (i in validTexts.indices) {
-                if (i > 0) builder.append('\n')
-                builder.append(validTexts[i])
+        if (cues.size <= 1) return cues
+        val unpositioned = mutableListOf<Cue>()
+        val positioned = mutableListOf<Cue>()
+        for (cue in cues) {
+            if (cue.line == Cue.DIMEN_UNSET && cue.position == Cue.DIMEN_UNSET) {
+                unpositioned.add(cue)
+            } else {
+                positioned.add(cue)
             }
-            builder
-        } else {
-            validTexts.distinct().joinToString("\n")
         }
-        return listOf(cues[0].buildUpon().setText(mergedText).build())
+        if (unpositioned.size <= 1) return cues
+
+        val mergedBuilder = StringBuilder()
+        unpositioned.forEachIndexed { index, cue ->
+            val text = cue.text?.toString() ?: ""
+            if (text.isNotEmpty()) {
+                if (index > 0 && mergedBuilder.isNotEmpty()) {
+                    mergedBuilder.append("\n")
+                }
+                mergedBuilder.append(text)
+            }
+        }
+        val firstUnpositioned = unpositioned.first()
+        val mergedCue = firstUnpositioned.buildUpon()
+            .setText(mergedBuilder.toString())
+            .build()
+        return listOf(mergedCue) + positioned
+    }
+
+    /**
+     * Checks if an internal subtitle track is allowed based on language and user tier (Plus vs Standard).
+     * Allowed: English, Chinese, and Burmese (Plus only).
+     */
+    fun isAllowedSubtitleTrack(track: TrackInfo, isPlus: Boolean): Boolean {
+        val code = track.language?.trim().orEmpty()
+        val lbl = track.name.trim()
+        val id = track.trackId?.trim().orEmpty()
+        val combined = "$code $lbl $id".trim()
+
+        val normalizedCode = normalizeLanguageCode(code).lowercase().substringBefore('-')
+        val normalizedLabel = normalizeLanguageCode(lbl).lowercase().substringBefore('-')
+
+        val isEnglish = normalizedCode == "en" || normalizedCode == "eng" ||
+                        normalizedLabel == "en" || normalizedLabel == "eng" ||
+                        combined.contains("english", ignoreCase = true) ||
+                        code.equals("en", ignoreCase = true) ||
+                        code.equals("eng", ignoreCase = true)
+
+        val isChinese = normalizedCode == "zh" || normalizedCode == "zho" || normalizedCode == "chi" || normalizedCode == "cmn" || normalizedCode == "yue" ||
+                        normalizedLabel == "zh" || normalizedLabel == "zho" || normalizedLabel == "chi" ||
+                        combined.contains("chinese", ignoreCase = true) ||
+                        combined.contains("mandarin", ignoreCase = true) ||
+                        combined.contains("cantonese", ignoreCase = true) ||
+                        combined.contains("中文", ignoreCase = true) ||
+                        code.equals("zh", ignoreCase = true) ||
+                        code.equals("chi", ignoreCase = true) ||
+                        code.equals("zho", ignoreCase = true)
+
+        val isBurmese = normalizedCode == "my" || normalizedCode == "mya" || normalizedCode == "bur" ||
+                        normalizedLabel == "my" || normalizedLabel == "mya" || normalizedLabel == "bur" ||
+                        combined.contains("burmese", ignoreCase = true) ||
+                        combined.contains("myanmar", ignoreCase = true) ||
+                        combined.contains("mmsub", ignoreCase = true) ||
+                        combined.contains("မြန်မာ", ignoreCase = true) ||
+                        code.equals("my", ignoreCase = true) ||
+                        code.equals("bur", ignoreCase = true) ||
+                        code.equals("mya", ignoreCase = true)
+
+        return when {
+            isPlus -> isEnglish || isChinese || isBurmese
+            else -> isEnglish || isChinese
+        }
+    }
+
+    /**
+     * Checks if an addon subtitle is allowed based on language and user tier (Plus vs Standard).
+     * Allowed: English, Chinese, and Burmese (Plus only).
+     */
+    fun isAllowedAddonSubtitle(subtitle: dev.khayin.app.domain.model.Subtitle, isPlus: Boolean): Boolean {
+        val code = subtitle.lang.trim()
+        val addon = subtitle.addonName.trim()
+        val id = subtitle.id.trim()
+        val combined = "$code $addon $id ${subtitle.url}".trim()
+
+        val normalizedCode = normalizeLanguageCode(code).lowercase().substringBefore('-')
+
+        val isEnglish = normalizedCode == "en" || normalizedCode == "eng" ||
+                        combined.contains("english", ignoreCase = true) ||
+                        code.equals("en", ignoreCase = true) ||
+                        code.equals("eng", ignoreCase = true)
+
+        val isChinese = normalizedCode == "zh" || normalizedCode == "zho" || normalizedCode == "chi" || normalizedCode == "cmn" || normalizedCode == "yue" ||
+                        combined.contains("chinese", ignoreCase = true) ||
+                        combined.contains("mandarin", ignoreCase = true) ||
+                        combined.contains("cantonese", ignoreCase = true) ||
+                        combined.contains("中文", ignoreCase = true) ||
+                        code.equals("zh", ignoreCase = true) ||
+                        code.equals("chi", ignoreCase = true) ||
+                        code.equals("zho", ignoreCase = true)
+
+        val isBurmese = normalizedCode == "my" || normalizedCode == "mya" || normalizedCode == "bur" ||
+                        combined.contains("burmese", ignoreCase = true) ||
+                        combined.contains("myanmar", ignoreCase = true) ||
+                        combined.contains("mmsub", ignoreCase = true) ||
+                        combined.contains("မြန်မာ", ignoreCase = true) ||
+                        subtitle.url.contains("stream.khayin.net", ignoreCase = true) ||
+                        code.equals("my", ignoreCase = true) ||
+                        code.equals("bur", ignoreCase = true) ||
+                        code.equals("mya", ignoreCase = true)
+
+        return when {
+            isPlus -> isEnglish || isChinese || isBurmese
+            else -> isEnglish || isChinese
+        }
+    }
+
+    /**
+     * Checks if a language code / label is allowed for subtitle options.
+     */
+    fun isAllowedSubtitleLanguageCode(code: String?, label: String? = null, isPlus: Boolean): Boolean {
+        val raw = code?.trim().orEmpty()
+        val lbl = label?.trim().orEmpty()
+        val combined = "$raw $lbl".trim()
+
+        val normalized = normalizeLanguageCode(raw).lowercase().substringBefore('-')
+
+        val isEnglish = normalized == "en" || normalized == "eng" ||
+                        combined.contains("english", ignoreCase = true) ||
+                        raw.equals("en", ignoreCase = true) ||
+                        raw.equals("eng", ignoreCase = true)
+
+        val isChinese = normalized == "zh" || normalized == "zho" || normalized == "chi" || normalized == "cmn" || normalized == "yue" ||
+                        combined.contains("chinese", ignoreCase = true) ||
+                        combined.contains("mandarin", ignoreCase = true) ||
+                        combined.contains("cantonese", ignoreCase = true) ||
+                        combined.contains("中文", ignoreCase = true) ||
+                        raw.equals("zh", ignoreCase = true) ||
+                        raw.equals("chi", ignoreCase = true) ||
+                        raw.equals("zho", ignoreCase = true)
+
+        val isBurmese = normalized == "my" || normalized == "mya" || normalized == "bur" ||
+                        combined.contains("burmese", ignoreCase = true) ||
+                        combined.contains("myanmar", ignoreCase = true) ||
+                        combined.contains("mmsub", ignoreCase = true) ||
+                        combined.contains("မြန်မာ", ignoreCase = true) ||
+                        raw.equals("my", ignoreCase = true) ||
+                        raw.equals("bur", ignoreCase = true) ||
+                        raw.equals("mya", ignoreCase = true)
+
+        return when {
+            isPlus -> isEnglish || isChinese || isBurmese
+            else -> isEnglish || isChinese
+        }
     }
 }
+

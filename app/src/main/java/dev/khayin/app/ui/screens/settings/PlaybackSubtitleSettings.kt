@@ -352,6 +352,10 @@ internal fun SubtitleSettingsDialogs(
     onDismissOutlineColorDialog: () -> Unit
 ) {
     if (showLanguageDialog) {
+        val isPlus = dev.khayin.app.features.license.LicenseRepository.isPlusMember
+        val allowedSubtitleLanguages = AVAILABLE_SUBTITLE_LANGUAGES.filter {
+            dev.khayin.app.ui.screens.player.PlayerSubtitleUtils.isAllowedSubtitleLanguageCode(it.code, it.displayName, isPlus)
+        }
         LanguageSelectionDialog(
             title = stringResource(R.string.sub_preferred_lang),
             selectedLanguage = when {
@@ -359,6 +363,7 @@ internal fun SubtitleSettingsDialogs(
                 playerSettings.subtitleStyle.isPreferredLanguageSystemDefault -> SubtitleLanguageOption.DEVICE
                 else -> playerSettings.subtitleStyle.preferredLanguage
             },
+            languages = allowedSubtitleLanguages,
             showNoneOption = true,
             extraOptions = listOf(SubtitleLanguageOption.DEVICE to stringResource(R.string.appearance_language_system)),
             onLanguageSelected = {
@@ -370,9 +375,14 @@ internal fun SubtitleSettingsDialogs(
     }
 
     if (showSecondaryLanguageDialog) {
+        val isPlus = dev.khayin.app.features.license.LicenseRepository.isPlusMember
+        val allowedSubtitleLanguages = AVAILABLE_SUBTITLE_LANGUAGES.filter {
+            dev.khayin.app.ui.screens.player.PlayerSubtitleUtils.isAllowedSubtitleLanguageCode(it.code, it.displayName, isPlus)
+        }
         LanguageSelectionDialog(
             title = stringResource(R.string.sub_secondary_lang),
             selectedLanguage = playerSettings.subtitleStyle.secondaryPreferredLanguage,
+            languages = allowedSubtitleLanguages,
             showNoneOption = true,
             onLanguageSelected = {
                 onSetSecondaryLanguage(it)

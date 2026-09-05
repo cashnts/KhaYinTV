@@ -354,6 +354,55 @@ object PostHogAnalytics {
         )
     }
 
+    fun trackSubtitleError(
+        errorType: String,
+        errorMessage: String,
+        subtitleId: String? = null,
+        subtitleUrl: String? = null,
+        language: String? = null,
+        addonName: String? = null,
+        mimeType: String? = null,
+        throwable: Throwable? = null,
+        extra: Map<String, Any>? = null,
+    ) {
+        val props = buildMap<String, Any> {
+            put("error_type", errorType)
+            put("error_message", errorMessage)
+            if (subtitleId != null) put("subtitle_id", subtitleId)
+            if (subtitleUrl != null) put("subtitle_url", subtitleUrl.take(300))
+            if (language != null) put("language", language)
+            if (addonName != null) put("addon_name", addonName)
+            if (mimeType != null) put("mime_type", mimeType)
+            if (extra != null) putAll(extra)
+        }
+        capture(event = "subtitle_error", properties = props)
+        log(
+            level = "ERROR",
+            tag = "Subtitle",
+            message = "Subtitle error [$errorType]: $errorMessage (lang=$language, addon=$addonName, id=$subtitleId)",
+            throwable = throwable,
+            properties = props
+        )
+        try {
+            if (io.sentry.Sentry.isEnabled()) {
+                val sentryEvent = io.sentry.SentryEvent(throwable ?: Exception("SubtitleError[$errorType]: $errorMessage")).apply {
+                    level = io.sentry.SentryLevel.ERROR
+                    setTag("feature", "subtitle")
+                    setTag("subtitle.error_type", errorType)
+                    if (language != null) setTag("subtitle.language", language)
+                    if (addonName != null) setTag("subtitle.addon", addonName)
+                    if (mimeType != null) setTag("subtitle.mime_type", mimeType)
+                    setExtra("subtitle_url", subtitleUrl?.take(300) ?: "")
+                    setExtra("subtitle_id", subtitleId ?: "")
+                    extra?.forEach { (k, v) -> setExtra(k, v) }
+                }
+                io.sentry.Sentry.captureEvent(sentryEvent)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Sentry subtitle error capture failed", e)
+        }
+    }
+
     fun reset() {
         try {
             PostHog.reset()
@@ -362,3 +411,4 @@ object PostHogAnalytics {
         }
     }
 }
+

@@ -1236,13 +1236,14 @@ internal fun LanguageSelectionDialog(
     title: String,
     selectedLanguage: String?,
     showNoneOption: Boolean,
+    languages: List<dev.khayin.app.data.local.SubtitleLanguage>? = null,
     extraOptions: List<Pair<String, String>> = emptyList(),
     onLanguageSelected: (String?) -> Unit,
     onDismiss: () -> Unit
 ) {
     val tmdbTitle = stringResource(R.string.tmdb_language_dialog_title)
-    val sortedLanguages = remember {
-        val baseList = if (title == tmdbTitle) AVAILABLE_TMDB_LANGUAGES else AVAILABLE_SUBTITLE_LANGUAGES
+    val sortedLanguages = remember(languages, title) {
+        val baseList = languages ?: if (title == tmdbTitle) AVAILABLE_TMDB_LANGUAGES else AVAILABLE_SUBTITLE_LANGUAGES
         baseList.sortedBy { it.displayName.lowercase() }
     }
     val languageOptions: List<SettingsPickerOption<String?>> = buildList {

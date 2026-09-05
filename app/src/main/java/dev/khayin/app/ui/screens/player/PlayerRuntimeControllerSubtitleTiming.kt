@@ -17,10 +17,10 @@ import java.util.concurrent.TimeUnit
 private val subtitleAutoSyncHttpClient: OkHttpClient by lazy {
     OkHttpClient.Builder()
         .dns(IPv4FirstDns())
-        // Sidecar + auto-sync both use this client; keep timeouts generous for flaky hosts.
-        .connectTimeout(12_000, TimeUnit.MILLISECONDS)
-        .readTimeout(15_000, TimeUnit.MILLISECONDS)
-        .callTimeout(25_000, TimeUnit.MILLISECONDS)
+        // Sidecar + auto-sync both use this client; keep timeouts generous for on-the-fly translation / flaky hosts.
+        .connectTimeout(15_000, TimeUnit.MILLISECONDS)
+        .readTimeout(45_000, TimeUnit.MILLISECONDS)
+        .callTimeout(60_000, TimeUnit.MILLISECONDS)
         .retryOnConnectionFailure(true)
         .followRedirects(true)
         .followSslRedirects(true)
@@ -215,8 +215,17 @@ internal suspend fun PlayerRuntimeController.downloadSubtitleBody(url: String, l
                 }
             }
         }
-        throw lastError ?: IllegalStateException("Subtitle download failed")
+        val finalError = lastError ?: IllegalStateException("Subtitle download failed")
+        dev.khayin.app.core.analytics.PostHogAnalytics.trackSubtitleError(
+            errorType = "download_failure",
+            errorMessage = finalError.message ?: "Subtitle download failed after retries",
+            subtitleUrl = url,
+            language = languageHint,
+            throwable = finalError
+        )
+        throw finalError
     }
+
 
 private fun PlayerRuntimeController.executeSubtitleDownload(url: String, languageHint: String? = null): String {
     val requestBuilder = Request.Builder().url(url)

@@ -72,11 +72,16 @@ internal fun PlayerRuntimeController.isSidecarAddonSubtitleActive(): Boolean {
 
 internal fun PlayerRuntimeController.bindExoSubtitleView(subtitleView: SubtitleView?) {
     exoSubtitleViewRef = subtitleView?.let { WeakReference(it) }
-    if (subtitleView == null && activeSidecarSubtitleKey != null) {
+    val currentKey = activeSidecarSubtitleKey
+    if (subtitleView != null && currentKey != null) {
+        subtitleView.setTag(R.id.player_view_sidecar_generation_tag, currentKey)
+    }
+    if (subtitleView == null && currentKey != null) {
         // View unbound while sidecar still active; ticker will no-op until rebound.
         return
     }
-    if (activeSidecarSubtitleKey != null && sidecarTimedCues.isNotEmpty()) {
+    if (currentKey != null && sidecarTimedCues.isNotEmpty()) {
+        lastSidecarCueSignature = null
         renderSidecarCuesAtCurrentPosition()
     }
 }
@@ -132,6 +137,15 @@ internal fun PlayerRuntimeController.startSidecarAddonSubtitle(subtitle: Subtitl
                         "urlMime=$urlMimeHint sniffed=$resolvedMime " +
                         "(buffer preserved; no media reload)"
                 )
+                dev.khayin.app.core.analytics.PostHogAnalytics.trackSubtitleError(
+                    errorType = "sidecar_parse_empty",
+                    errorMessage = "Parsed 0 cues from subtitle body",
+                    subtitleId = subtitle.id,
+                    subtitleUrl = subtitle.url,
+                    language = subtitle.lang,
+                    addonName = subtitle.addonName,
+                    mimeType = resolvedMime
+                )
                 // Stay on sidecar path — do not wipe progressive buffer via setMediaSource.
                 activeSidecarSubtitleKey = null
                 sidecarTimedCues = emptyList()
@@ -143,6 +157,9 @@ internal fun PlayerRuntimeController.startSidecarAddonSubtitle(subtitle: Subtitl
             }
 
             sidecarTimedCues = parseResult.cues
+            postToSubtitleView { view ->
+                view.setTag(R.id.player_view_sidecar_generation_tag, subtitleKey)
+            }
             Log.d(
                 PlayerRuntimeController.TAG,
                 "Sidecar subtitle ready id=${subtitle.id} cues=${parseResult.cues.size} " +
@@ -151,7 +168,11 @@ internal fun PlayerRuntimeController.startSidecarAddonSubtitle(subtitle: Subtitl
             )
 
             while (isActive && activeSidecarSubtitleKey == subtitleKey) {
-                renderSidecarCuesAtCurrentPosition()
+                try {
+                    renderSidecarCuesAtCurrentPosition()
+                } catch (e: Exception) {
+                    Log.w(PlayerRuntimeController.TAG, "Sidecar render tick error: ${e.message}")
+                }
                 delay(SIDECAR_RENDER_INTERVAL_MS)
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -162,6 +183,15 @@ internal fun PlayerRuntimeController.startSidecarAddonSubtitle(subtitle: Subtitl
                 PlayerRuntimeController.TAG,
                 "Sidecar subtitle failed id=${subtitle.id}: ${e.message} " +
                     "(buffer preserved; no media reload)"
+            )
+            dev.khayin.app.core.analytics.PostHogAnalytics.trackSubtitleError(
+                errorType = "sidecar_runtime_failure",
+                errorMessage = e.message ?: "Sidecar subtitle playback failed",
+                subtitleId = subtitle.id,
+                subtitleUrl = subtitle.url,
+                language = subtitle.lang,
+                addonName = subtitle.addonName,
+                throwable = e
             )
             activeSidecarSubtitleKey = null
             sidecarTimedCues = emptyList()
@@ -190,12 +220,17 @@ internal fun PlayerRuntimeController.renderSidecarCuesAtCurrentPosition() {
     }
     val merged = PlayerSubtitleUtils.mergeOverlappingCues(active)
     val signature = activeCueSignature(merged)
-    if (signature == lastSidecarCueSignature) return
-    lastSidecarCueSignature = signature
     val currentKey = activeSidecarSubtitleKey ?: return
     postToSubtitleView { view ->
-        if (view.getTag(R.id.player_view_sidecar_generation_tag) == currentKey) {
-            view.setCues(merged)
+        if (activeSidecarSubtitleKey == currentKey) {
+            view.setTag(R.id.player_view_sidecar_generation_tag, currentKey)
+            if (merged.isNotEmpty()) {
+                lastSidecarCueSignature = signature
+                view.setCues(merged)
+            } else if (signature != lastSidecarCueSignature) {
+                lastSidecarCueSignature = signature
+                view.setCues(emptyList())
+            }
         }
     }
 }
@@ -223,32 +258,32 @@ internal data class SidecarParseResult(
 internal fun parseSidecarTimedCuesRobust(rawText: String, sourceUrl: String): SidecarParseResult {
     val cleaned = SubtitleMojibakeSanitizer.sanitize(rawText.replace("\uFEFF", "")).toString()
     val candidates = PlayerSubtitleUtils.sidecarMimeCandidates(cleaned, sourceUrl)
-    for (mime in candidates) {
-        val parsed = parseSidecarTimedCuesWithMime(cleaned, mime)
-        if (parsed.isNotEmpty()) {
-            val fixed = PlayerSubtitleRtlFix.fixTimedCues(parsed, isBuiltInSubtitle = false)
-            val normalized = if (mime == MimeTypes.TEXT_VTT) normalizeTimedCuePositions(fixed) else fixed
-            return SidecarParseResult(
-                normalized,
-                mime,
-                source = "media3"
-            )
-        }
-    }
 
+    var bestResult: SidecarParseResult? = null
+    var maxCues = 0
+
+    // 1. Lenient parser first (handles real-world SRT/VTT/ASS including malformed/unclean lines)
     val lenient = parseSidecarTimedCuesLenient(cleaned, sourceUrl)
     if (lenient.isNotEmpty()) {
         val mime = PlayerSubtitleUtils.sniffSubtitleMimeType(cleaned, sourceUrl)
         val fixed = PlayerSubtitleRtlFix.fixTimedCues(lenient, isBuiltInSubtitle = false)
         val normalized = if (mime == MimeTypes.TEXT_VTT) normalizeTimedCuePositions(fixed) else fixed
-        return SidecarParseResult(
-            normalized,
-            mime,
-            source = "lenient"
-        )
+        bestResult = SidecarParseResult(normalized, mime, source = "lenient")
+        maxCues = normalized.size
     }
 
-    return SidecarParseResult(
+    // 2. Try Media3 parsers only if it finds MORE cues than lenient (e.g. specialized formats)
+    for (mime in candidates) {
+        val parsed = parseSidecarTimedCuesWithMime(cleaned, mime)
+        if (parsed.size > maxCues) {
+            val fixed = PlayerSubtitleRtlFix.fixTimedCues(parsed, isBuiltInSubtitle = false)
+            val normalized = if (mime == MimeTypes.TEXT_VTT) normalizeTimedCuePositions(fixed) else fixed
+            bestResult = SidecarParseResult(normalized, mime, source = "media3")
+            maxCues = normalized.size
+        }
+    }
+
+    return bestResult ?: SidecarParseResult(
         cues = emptyList(),
         effectiveMime = candidates.firstOrNull() ?: MimeTypes.APPLICATION_SUBRIP,
         source = "none"
@@ -292,7 +327,7 @@ private fun parseSidecarTimedCuesWithMime(rawText: String, mimeType: String): Li
 }
 
 /**
- * Lenient SRT/VTT path using [PlayerSubtitleCueParser] when Media3 rejects slightly malformed files.
+ * Lenient SRT/VTT/ASS path using [PlayerSubtitleCueParser] when Media3 rejects slightly malformed files.
  * Uses each cue's exact [SubtitleSyncCue.endTimeMs] (not stretched to the next cue start).
  */
 internal fun parseSidecarTimedCuesLenient(rawText: String, sourceUrl: String): List<CuesWithTiming> {
@@ -312,6 +347,7 @@ internal fun parseSidecarTimedCuesLenient(rawText: String, sourceUrl: String): L
         val cue = Cue.Builder().setText(syncCues[i].text).build()
         out.add(CuesWithTiming(listOf(cue), startUs, durationUs))
     }
+    out.sortBy { it.startTimeUs }
     return out
 }
 
@@ -322,14 +358,15 @@ private fun collectActiveSidecarCues(
     if (cues.isEmpty()) return emptyList()
     val active = ArrayList<Cue>(4)
     for (entry in cues) {
-        if (entry.startTimeUs > positionUs) break
-        val end = when {
-            entry.endTimeUs != C.TIME_UNSET -> entry.endTimeUs
-            entry.durationUs != C.TIME_UNSET -> entry.startTimeUs + entry.durationUs
-            else -> Long.MAX_VALUE
-        }
-        if (positionUs < end) {
-            active.addAll(entry.cues)
+        if (positionUs >= entry.startTimeUs) {
+            val end = when {
+                entry.endTimeUs != C.TIME_UNSET -> entry.endTimeUs
+                entry.durationUs != C.TIME_UNSET -> entry.startTimeUs + entry.durationUs
+                else -> Long.MAX_VALUE
+            }
+            if (positionUs < end) {
+                active.addAll(entry.cues)
+            }
         }
     }
     return active

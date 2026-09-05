@@ -451,7 +451,13 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
                 val decodedBody = downloadSubtitleBody(subtitle.url, subtitle.lang)
                 val sanitized = SubtitleMojibakeSanitizer.sanitize(decodedBody).toString()
                 val cacheDir = java.io.File(context.cacheDir, "subtitles").also { it.mkdirs() }
-                val ext = if (subtitle.url.contains(".vtt", ignoreCase = true)) "vtt" else "srt"
+                val sniffedMime = PlayerSubtitleUtils.sniffSubtitleMimeType(sanitized, subtitle.url)
+                val ext = when (sniffedMime) {
+                    androidx.media3.common.MimeTypes.TEXT_VTT -> "vtt"
+                    androidx.media3.common.MimeTypes.TEXT_SSA -> "ass"
+                    androidx.media3.common.MimeTypes.APPLICATION_TTML -> "ttml"
+                    else -> if (subtitle.url.contains(".vtt", ignoreCase = true)) "vtt" else "srt"
+                }
                 val file = java.io.File(cacheDir, "mpv_${subtitle.id.hashCode()}.$ext")
                 file.writeText(sanitized, Charsets.UTF_8)
                 file.absolutePath

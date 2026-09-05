@@ -55,14 +55,27 @@ class SubtitleRepositoryImpl @Inject constructor(
             return@withContext emptyList()
         }
 
+        val isPlus = dev.khayin.app.features.license.LicenseRepository.isPlusMember
+
         // Filter addons that support subtitles resource
         val subtitleAddons = addons.filter { addon ->
-            addon.resources.any { resource ->
+            val supportsResource = addon.resources.any { resource ->
                 isSubtitleResource(resource.name) && supportsType(addon, resource, requestType, id)
             }
+            if (!supportsResource) return@filter false
+            if (!isPlus) {
+                // If not Plus (standard tier), skip addons specifically for Burmese/MMSub translation
+                val isBurmeseAddon = addon.name.contains("mmsub", ignoreCase = true) ||
+                    addon.name.contains("khayin", ignoreCase = true) ||
+                    addon.baseUrl.contains("stream.khayin.net", ignoreCase = true) ||
+                    addon.displayName.contains("burmese", ignoreCase = true) ||
+                    addon.displayName.contains("myanmar", ignoreCase = true)
+                if (isBurmeseAddon) return@filter false
+            }
+            true
         }
         
-        Log.d(TAG, "Found ${subtitleAddons.size} subtitle addons: ${subtitleAddons.map { it.name }}")
+        Log.d(TAG, "Found ${subtitleAddons.size} subtitle addons (isPlus=$isPlus): ${subtitleAddons.map { it.name }}")
 
         if (subtitleAddons.isEmpty()) {
             return@withContext emptyList()
@@ -79,7 +92,7 @@ class SubtitleRepositoryImpl @Inject constructor(
             subtitleAddons.map { addon ->
                 async {
                     val addonStartMs = System.currentTimeMillis()
-                    val subtitles = try {
+                    val rawSubtitles = try {
                         withTimeoutOrNull(PER_ADDON_TIMEOUT_MS) {
                             fetchSubtitlesFromAddon(addon, type, id, videoId, videoHash, videoSize, filename)
                         }
@@ -87,8 +100,20 @@ class SubtitleRepositoryImpl @Inject constructor(
                         throw e
                     } catch (e: Exception) {
                         Log.e(TAG, "Exception fetching subtitles from ${addon.name}", e)
+                        dev.khayin.app.core.analytics.PostHogAnalytics.trackSubtitleError(
+                            errorType = "addon_fetch_failure",
+                            errorMessage = e.message ?: "Exception fetching subtitles from addon",
+                            addonName = addon.name,
+                            throwable = e,
+                            extra = mapOf(
+                                "media_type" to type,
+                                "media_id" to id,
+                                "video_id" to (videoId ?: "")
+                            )
+                        )
                         emptyList()
                     }
+                    val subtitles = rawSubtitles?.filter { dev.khayin.app.ui.screens.player.PlayerSubtitleUtils.isAllowedAddonSubtitle(it, isPlus) }
                     onProgress?.invoke(completedCount.incrementAndGet(), total, addon.displayName)
                     if (!subtitles.isNullOrEmpty()) {
                         val snapshot = synchronized(accumulatedSubtitles) {
@@ -106,10 +131,20 @@ class SubtitleRepositoryImpl @Inject constructor(
                         )
                         subtitles
                     } else {
-                        if (subtitles == null) {
+                        if (rawSubtitles == null) {
                             Log.w(
                                 TAG,
                                 "Subtitle fetch timed out for addon=${addon.name} after ${PER_ADDON_TIMEOUT_MS}ms"
+                            )
+                            dev.khayin.app.core.analytics.PostHogAnalytics.trackSubtitleError(
+                                errorType = "addon_fetch_timeout",
+                                errorMessage = "Subtitle fetch timed out for addon=${addon.name}",
+                                addonName = addon.name,
+                                extra = mapOf(
+                                    "media_type" to type,
+                                    "media_id" to id,
+                                    "timeout_ms" to PER_ADDON_TIMEOUT_MS
+                                )
                             )
                         }
                         emptyList()
