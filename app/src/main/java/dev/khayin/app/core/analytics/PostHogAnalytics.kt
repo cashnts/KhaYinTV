@@ -22,6 +22,11 @@ object PostHogAnalytics {
             ).apply {
                 captureApplicationLifecycleEvents = true
                 captureScreenViews = true
+                captureDeepLinks = true
+                sessionReplay = true
+                sessionReplayConfig.maskAllTextInputs = true
+                sessionReplayConfig.maskAllImages = true
+                sessionReplayConfig.captureLogcat = true
             }
             PostHogAndroid.setup(application, config)
             val savedKey = LicenseStorage.loadLastKnownKey()?.takeIf { it.isNotBlank() }
@@ -32,7 +37,7 @@ object PostHogAnalytics {
             PostHogLogger.start()
             installUncaughtExceptionHandler()
 
-            Log.i(TAG, "PostHog initialized successfully on TV (distinctId=$savedKey)")
+            Log.i(TAG, "PostHog initialized with Error Tracking & Session Replay on TV (distinctId=$savedKey)")
             log(level = "INFO", tag = "AppLifecycle", message = "KhaYin TV started (distinctId=$savedKey)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize PostHog", e)
@@ -45,13 +50,12 @@ object PostHogAnalytics {
         val originalHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
-                log(
-                    level = "FATAL",
-                    tag = "Crash",
-                    message = "Uncaught exception on thread ${thread.name}: ${throwable.message}",
-                    throwable = throwable
+                captureException(
+                    throwable = throwable,
+                    tag = "UncaughtCrash",
+                    isUnhandled = true,
+                    properties = mapOf("thread_name" to thread.name)
                 )
-                captureException(throwable, tag = "UncaughtCrash", properties = mapOf("thread_name" to thread.name))
                 PostHog.flush()
                 PostHogLogger.flush()
             } catch (e: Exception) {
@@ -116,15 +120,16 @@ object PostHogAnalytics {
                 attributes = properties
             )
 
-            // If error/fatal, also capture exception in PostHog Analytics
+            // If error/fatal, also report into PostHog Error Tracking ($exception)
             if (level.equals("ERROR", ignoreCase = true) || level.equals("FATAL", ignoreCase = true) || throwable != null) {
                 val exProps = (properties ?: emptyMap()).toMutableMap()
                 exProps["platform"] = "Android TV"
                 exProps["\$exception_message"] = throwable?.message ?: message
-                exProps["\$exception_type"] = throwable?.let { it::class.java.simpleName } ?: "Error"
+                exProps["\$exception_type"] = throwable?.let { it::class.java.name } ?: "ApplicationError"
                 exProps["tag"] = tag
+                exProps["\$exception_handled"] = !level.equals("FATAL", ignoreCase = true)
                 if (throwable != null) {
-                    exProps["\$exception_stack_trace_raw"] = throwable.stackTraceToString().take(4000)
+                    exProps["\$exception_stack_trace_raw"] = throwable.stackTraceToString().take(6000)
                 }
                 PostHog.capture("\$exception", properties = exProps)
             }
@@ -136,14 +141,28 @@ object PostHogAnalytics {
     fun captureException(
         throwable: Throwable,
         tag: String = "Error",
+        isUnhandled: Boolean = false,
         properties: Map<String, Any>? = null
     ) {
-        log(
-            level = "ERROR",
+        try {
+            val exProps = (properties ?: emptyMap()).toMutableMap()
+            exProps["platform"] = "Android TV"
+            exProps["tag"] = tag
+            exProps["\$exception_type"] = throwable.javaClass.name
+            exProps["\$exception_message"] = throwable.message ?: throwable.javaClass.simpleName
+            exProps["\$exception_stack_trace_raw"] = throwable.stackTraceToString().take(8000)
+            exProps["\$exception_handled"] = !isUnhandled
+            PostHog.capture("\$exception", properties = exProps)
+        } catch (e: Exception) {
+            Log.w(TAG, "PostHog captureException failed", e)
+        }
+
+        PostHogLogger.log(
+            level = if (isUnhandled) "FATAL" else "ERROR",
             tag = tag,
-            message = throwable.message ?: "Exception occurred",
+            message = "${throwable.javaClass.simpleName}: ${throwable.message}",
             throwable = throwable,
-            properties = properties
+            attributes = properties
         )
     }
 
