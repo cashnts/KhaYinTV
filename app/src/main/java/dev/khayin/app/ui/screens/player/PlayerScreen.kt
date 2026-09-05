@@ -896,6 +896,16 @@ fun PlayerScreen(
             torrentBufferingProgress = uiState.torrentBufferingProgress
         )
 
+        // Asynchronous on-demand subtitle loading indicator
+        SubtitleLoadingIndicator(
+            isLoading = uiState.isSubtitleLoading,
+            message = uiState.subtitleLoadingMessage,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = NuvioTheme.spacing.xl)
+                .zIndex(2.8f)
+        )
+
         // Error state
         if (uiState.error != null) {
             ErrorOverlay(
@@ -3306,3 +3316,43 @@ private fun PlayerBufferingIndicator(
         }
     }
 }
+
+@Composable
+private fun SubtitleLoadingIndicator(
+    isLoading: Boolean,
+    message: String?,
+    modifier: Modifier = Modifier
+) {
+    androidx.compose.animation.AnimatedVisibility(
+        visible = isLoading,
+        enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.slideInVertically { -it / 2 },
+        exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.slideOutVertically { -it / 2 },
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier
+                .background(
+                    color = Color.Black.copy(alpha = 0.8f),
+                    shape = RoundedCornerShape(NuvioTheme.radii.lg)
+                )
+                .padding(horizontal = NuvioTheme.spacing.lg, vertical = NuvioTheme.spacing.sm),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
+            ) {
+                LoadingIndicator(
+                    modifier = Modifier.size(NuvioTheme.spacing.lg),
+                    color = NuvioTheme.colors.Primary
+                )
+                Text(
+                    text = message ?: "Loading subtitles...",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White
+                )
+            }
+        }
+    }
+}
+

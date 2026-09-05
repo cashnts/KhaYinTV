@@ -18,6 +18,7 @@ import dev.khayin.app.R
 import dev.khayin.app.domain.model.Subtitle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -92,6 +93,12 @@ internal fun PlayerRuntimeController.stopSidecarAddonSubtitle(clearView: Boolean
     activeSidecarSubtitleKey = null
     sidecarTimedCues = emptyList()
     lastSidecarCueSignature = null
+    _uiState.update {
+        it.copy(
+            isSubtitleLoading = false,
+            subtitleLoadingMessage = null
+        )
+    }
     if (clearView) {
         postToSubtitleView { view ->
             view.setTag(R.id.player_view_sidecar_generation_tag, null)
@@ -114,6 +121,17 @@ internal fun PlayerRuntimeController.startSidecarAddonSubtitle(subtitle: Subtitl
     activeSidecarSubtitleKey = subtitleKey
     lastSidecarCueSignature = null
     sidecarTimedCues = emptyList()
+    
+    val langLabel = PlayerSubtitleUtils.languageDisplayName(subtitle.lang).ifBlank {
+        if (subtitle.lang.equals("bur", ignoreCase = true) || subtitle.lang.equals("my", ignoreCase = true)) "Burmese" else subtitle.lang
+    }
+    _uiState.update {
+        it.copy(
+            isSubtitleLoading = true,
+            subtitleLoadingMessage = "Loading $langLabel subtitles..."
+        )
+    }
+
     postToSubtitleView { view ->
         view.setTag(R.id.player_view_sidecar_generation_tag, subtitleKey)
         view.setCues(emptyList())
@@ -146,9 +164,14 @@ internal fun PlayerRuntimeController.startSidecarAddonSubtitle(subtitle: Subtitl
                     addonName = subtitle.addonName,
                     mimeType = resolvedMime
                 )
-                // Stay on sidecar path — do not wipe progressive buffer via setMediaSource.
                 activeSidecarSubtitleKey = null
                 sidecarTimedCues = emptyList()
+                _uiState.update {
+                    it.copy(
+                        isSubtitleLoading = false,
+                        subtitleLoadingMessage = null
+                    )
+                }
                 postToSubtitleView { view ->
                     view.setTag(R.id.player_view_sidecar_generation_tag, null)
                     view.setCues(emptyList())
@@ -157,6 +180,12 @@ internal fun PlayerRuntimeController.startSidecarAddonSubtitle(subtitle: Subtitl
             }
 
             sidecarTimedCues = parseResult.cues
+            _uiState.update {
+                it.copy(
+                    isSubtitleLoading = false,
+                    subtitleLoadingMessage = null
+                )
+            }
             postToSubtitleView { view ->
                 view.setTag(R.id.player_view_sidecar_generation_tag, subtitleKey)
             }
@@ -166,6 +195,38 @@ internal fun PlayerRuntimeController.startSidecarAddonSubtitle(subtitle: Subtitl
                     "mime=${parseResult.effectiveMime} source=${parseResult.source} " +
                     "(buffer preserved)"
             )
+
+            // For on-demand generated subtitles: poll in background to seamlessly update newer cues
+            val isOnDemandCandidate = subtitle.url.contains("stream.khayin.net", ignoreCase = true) ||
+                subtitle.addonName?.contains("KhaYin", ignoreCase = true) == true
+            if (isOnDemandCandidate && parseResult.cues.size < 500) {
+                scope.launch {
+                    var lastCount = parseResult.cues.size
+                    var attempts = 0
+                    while (isActive && activeSidecarSubtitleKey == subtitleKey && attempts < 15) {
+                        delay(10_000L) // poll every 10 seconds
+                        if (activeSidecarSubtitleKey != subtitleKey) break
+                        attempts++
+                        try {
+                            val nextBody = downloadSubtitleBody(subtitle.url, subtitle.lang)
+                            if (activeSidecarSubtitleKey != subtitleKey) break
+                            val nextParse = withContext(Dispatchers.Default) {
+                                parseSidecarTimedCuesRobust(nextBody, subtitle.url)
+                            }
+                            if (nextParse.cues.size > lastCount) {
+                                Log.d(
+                                    PlayerRuntimeController.TAG,
+                                    "On-demand subtitle progressive update: $lastCount -> ${nextParse.cues.size} cues"
+                                )
+                                lastCount = nextParse.cues.size
+                                sidecarTimedCues = nextParse.cues
+                                lastSidecarCueSignature = null
+                                renderSidecarCuesAtCurrentPosition()
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
 
             while (isActive && activeSidecarSubtitleKey == subtitleKey) {
                 try {
@@ -195,6 +256,12 @@ internal fun PlayerRuntimeController.startSidecarAddonSubtitle(subtitle: Subtitl
             )
             activeSidecarSubtitleKey = null
             sidecarTimedCues = emptyList()
+            _uiState.update {
+                it.copy(
+                    isSubtitleLoading = false,
+                    subtitleLoadingMessage = null
+                )
+            }
             postToSubtitleView { view ->
                 view.setTag(R.id.player_view_sidecar_generation_tag, null)
                 view.setCues(emptyList())

@@ -120,6 +120,8 @@ data class PlayerUiState(
     val addonSubtitles: List<Subtitle> = emptyList(),
     val isLoadingAddonSubtitles: Boolean = false,
     val selectedAddonSubtitle: Subtitle? = null,
+    val isSubtitleLoading: Boolean = false,
+    val subtitleLoadingMessage: String? = null,
     val addonSubtitlesError: String? = null,
     val installedSubtitleAddonOrder: List<String> = emptyList(),
     // Episodes/streams side panel (for series)

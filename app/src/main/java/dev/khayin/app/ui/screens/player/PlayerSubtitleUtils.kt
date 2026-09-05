@@ -378,6 +378,28 @@ object PlayerSubtitleUtils {
         }
         return trimmed
     }
+
+    /**
+     * Human-friendly language name helper for subtitle loading UI.
+     */
+    fun languageDisplayName(code: String?): String {
+        val norm = normalizeLanguageCode(code.orEmpty()).lowercase()
+        return when {
+            norm == "my" || norm == "bur" || norm == "mya" -> "Burmese"
+            norm == "en" || norm == "eng" -> "English"
+            norm == "zh" || norm == "zho" || norm == "chi" || norm == "cmn" || norm == "yue" -> "Chinese"
+            norm == "pt" || norm == "por" -> "Portuguese"
+            norm == "pt-br" -> "Portuguese (BR)"
+            norm == "es" || norm == "spa" -> "Spanish"
+            norm == "es-419" -> "Spanish (LA)"
+            norm == "ja" || norm == "jpn" -> "Japanese"
+            norm == "ko" || norm == "kor" -> "Korean"
+            norm == "th" || norm == "tha" -> "Thai"
+            norm == "ru" || norm == "rus" -> "Russian"
+            norm.isBlank() -> "Burmese"
+            else -> code?.trim()?.uppercase() ?: "Burmese"
+        }
+    }
 }
 
 
