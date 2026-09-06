@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object PostHogTracer {
     private const val TAG = "PostHogTracer"
-    private const val ENDPOINT = "https://us.i.posthog.com/i/v1/traces"
+    private const val ENDPOINT = "https://aa.khayin.dev/i/v1/traces"
     private const val FLUSH_INTERVAL_MS = 3_000L
     private const val MAX_BATCH_SIZE = 50
     private const val MAX_QUEUE_CAPACITY = 300

@@ -10,7 +10,7 @@ import dev.khayin.app.features.license.LicenseStorage
 object PostHogAnalytics {
     private const val TAG = "PostHogAnalytics"
     const val API_KEY = "phc_BbmKpZksuoFxSHLj5PS8tbZttzcwkFU82AsQdyLiTsrd"
-    const val HOST = "https://us.i.posthog.com"
+    const val HOST = "https://aa.khayin.dev"
 
     private var uncaughtHandlerInstalled = false
 
