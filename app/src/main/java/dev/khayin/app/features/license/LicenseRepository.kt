@@ -157,65 +157,67 @@ object LicenseRepository {
         val apiKey = BuildConfig.SUPABASE_ANON_KEY
 
         runCatching {
-            // First attempt: call Postgres activate_license RPC
-            val rpcPayloadMap = mapOf(
-                "p_key" to key,
-                "p_device_id" to deviceId,
-                "p_device_name" to "Android TV",
-            )
-            val rpcPayload = gson.toJson(rpcPayloadMap)
-            val rpcUrl = "$restUrl/rpc/activate_license"
+            // First attempt: call Postgres activate_license RPC to register device
+            var rpcNonce: String? = null
+            var rpcTier: String? = null
+            var rpcCustomerName: String? = null
+            var rpcExpiresAt: String? = null
+            var rpcMaxDevices: Int? = null
 
-            val secHeaders = KhaYinSecurityBridge.buildSecureHeaders("POST", rpcUrl, rpcPayload)
-            val reqBuilder = Request.Builder()
-                .url(rpcUrl)
-                .addHeader("apikey", apiKey)
-                .addHeader("Authorization", "Bearer $apiKey")
-                .addHeader("Content-Type", "application/json")
-                .post(rpcPayload.toRequestBody("application/json".toMediaType()))
-
-            secHeaders.forEach { (k, v) -> reqBuilder.addHeader(k, v) }
-
-            val response = httpClient.newCall(reqBuilder.build()).execute()
-            val rawBody = response.body?.string() ?: ""
-
-            val info: LicenseInfo = if (response.isSuccessful && rawBody.trim().startsWith("{")) {
-                val resp = gson.fromJson(rawBody.trim(), LicenseActivationResponse::class.java)
-                if (!resp.success) {
-                    val err = resp.error ?: resp.message ?: "License activation failed."
-                    _error.value = err
-                    throw IllegalStateException(err)
-                }
-                LicenseInfo(
-                    key = resp.key?.trim()?.uppercase()?.takeIf { it.isNotBlank() } ?: key,
-                    status = resp.status ?: "active",
-                    customerName = resp.customerName,
-                    tier = resp.tier ?: "standard",
-                    expiresAt = resp.expiresAt,
-                    maxDevices = resp.resolvedMaxDevices,
-                    activeDevices = 1,
-                    nonce = resp.nonce ?: activationNonce,
+            try {
+                val rpcPayloadMap = mapOf(
+                    "p_key" to key,
+                    "p_device_id" to deviceId,
+                    "p_device_name" to "Android TV",
                 )
-            } else {
-                // Fallback: direct table query
-                val queryUrl = "$restUrl/license_keys?key=eq.$key&select=*"
-                val qSecHeaders = KhaYinSecurityBridge.buildSecureHeaders("GET", queryUrl, "")
-                val qReq = Request.Builder()
-                    .url(queryUrl)
+                val rpcPayload = gson.toJson(rpcPayloadMap)
+                val rpcUrl = "$restUrl/rpc/activate_license"
+
+                val secHeaders = KhaYinSecurityBridge.buildSecureHeaders("POST", rpcUrl, rpcPayload)
+                val reqBuilder = Request.Builder()
+                    .url(rpcUrl)
                     .addHeader("apikey", apiKey)
                     .addHeader("Authorization", "Bearer $apiKey")
                     .addHeader("Content-Type", "application/json")
-                qSecHeaders.forEach { (k, v) -> qReq.addHeader(k, v) }
+                    .post(rpcPayload.toRequestBody("application/json".toMediaType()))
 
-                val qResp = httpClient.newCall(qReq.build()).execute()
-                val qBody = qResp.body?.string() ?: ""
+                secHeaders.forEach { (k, v) -> reqBuilder.addHeader(k, v) }
 
-                if (!qResp.isSuccessful) {
-                    val errObj = runCatching { gson.fromJson(qBody, SupabaseErrorResponse::class.java) }.getOrNull()
-                    val msg = errObj?.message ?: errObj?.error ?: "Supabase error (HTTP ${qResp.code})"
-                    throw IllegalStateException(msg)
+                val response = httpClient.newCall(reqBuilder.build()).execute()
+                val rawBody = response.body?.string() ?: ""
+
+                if (response.isSuccessful && rawBody.trim().startsWith("{")) {
+                    val resp = gson.fromJson(rawBody.trim(), LicenseActivationResponse::class.java)
+                    if (!resp.success) {
+                        val err = resp.error ?: resp.message ?: "License activation failed."
+                        _error.value = err
+                        throw IllegalStateException(err)
+                    }
+                    rpcNonce = resp.nonce
+                    rpcTier = resp.tier
+                    rpcCustomerName = resp.customerName
+                    rpcExpiresAt = resp.expiresAt
+                    rpcMaxDevices = resp.resolvedMaxDevices
                 }
+            } catch (e: Exception) {
+                if (e is IllegalStateException) throw e
+                Log.w(TAG, "activate_license RPC call warning: ${e.message}")
+            }
 
+            // Always query the license_keys table to get full metadata (tier, profile, notes, expiration)
+            val queryUrl = "$restUrl/license_keys?key=eq.$key&select=*"
+            val qSecHeaders = KhaYinSecurityBridge.buildSecureHeaders("GET", queryUrl, "")
+            val qReq = Request.Builder()
+                .url(queryUrl)
+                .addHeader("apikey", apiKey)
+                .addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("Content-Type", "application/json")
+            qSecHeaders.forEach { (k, v) -> qReq.addHeader(k, v) }
+
+            val qResp = httpClient.newCall(qReq.build()).execute()
+            val qBody = qResp.body?.string() ?: ""
+
+            val info: LicenseInfo = if (qResp.isSuccessful && !qBody.startsWith("<")) {
                 val records = runCatching {
                     gson.fromJson(qBody, Array<SupabaseLicenseRecord>::class.java)?.toList()
                 }.getOrNull()
@@ -226,7 +228,25 @@ object LicenseRepository {
                     throw IllegalStateException(err)
                 }
 
-                records.first().toLicenseInfo(fallbackKey = key).copy(nonce = activationNonce)
+                records.first().toLicenseInfo(fallbackKey = key).copy(
+                    nonce = rpcNonce ?: activationNonce
+                )
+            } else {
+                if (!qResp.isSuccessful && rpcNonce == null) {
+                    val errObj = runCatching { gson.fromJson(qBody, SupabaseErrorResponse::class.java) }.getOrNull()
+                    val msg = errObj?.message ?: errObj?.error ?: "Supabase error (HTTP ${qResp.code})"
+                    throw IllegalStateException(msg)
+                }
+                LicenseInfo(
+                    key = key,
+                    status = "active",
+                    customerName = rpcCustomerName,
+                    tier = rpcTier ?: "plus",
+                    expiresAt = rpcExpiresAt,
+                    maxDevices = rpcMaxDevices ?: 1,
+                    activeDevices = 1,
+                    nonce = rpcNonce ?: activationNonce,
+                )
             }
 
             if (info.status.equals("revoked", ignoreCase = true)) {
@@ -249,13 +269,13 @@ object LicenseRepository {
             _state.value = LicenseState.Active(info)
             _error.value = null
             dev.khayin.app.core.analytics.PostHogAnalytics.identify(info.key, mapOf(
-                "tier" to (info.tier ?: "standard"),
+                "tier" to (info.tier ?: "plus"),
                 "customer_name" to (info.customerName ?: ""),
                 "device_id" to deviceId
             ))
             dev.khayin.app.core.analytics.PostHogAnalytics.capture("license_activated", mapOf(
                 "license_key" to info.key,
-                "tier" to (info.tier ?: "standard"),
+                "tier" to (info.tier ?: "plus"),
                 "expires_at" to (info.expiresAt ?: "")
             ))
             info
@@ -269,7 +289,7 @@ object LicenseRepository {
         val currentInfo = (_state.value as? LicenseState.Active)?.info ?: return@withContext
         try {
             val restUrl = supabaseRestUrl()
-            val key = currentInfo.key
+            val key = currentInfo.key.trim().uppercase()
             val apiKey = BuildConfig.SUPABASE_ANON_KEY
             val checkUrl = "$restUrl/license_keys?key=eq.$key&select=*"
 
@@ -290,16 +310,20 @@ object LicenseRepository {
                 }.getOrNull()
 
                 if (!records.isNullOrEmpty()) {
-                    val updated = records.first().toLicenseInfo(fallbackKey = key)
+                    val updated = records.first().toLicenseInfo(fallbackKey = key).let { rec ->
+                        if (rec.nonce.isNullOrBlank() && !currentInfo.nonce.isNullOrBlank()) {
+                            rec.copy(nonce = currentInfo.nonce)
+                        } else {
+                            rec
+                        }
+                    }
                     if (updated.status.equals("revoked", ignoreCase = true)) {
                         _state.value = LicenseState.Revoked(updated)
                     } else if (isExpiredTimestamp(updated.expiresAt)) {
                         _state.value = LicenseState.Expired(updated)
                     } else {
                         saveSecureLicensePayload(updated)
-                        if (updated != currentInfo) {
-                            _state.value = LicenseState.Active(updated)
-                        }
+                        _state.value = LicenseState.Active(updated)
                     }
                 }
             }
