@@ -76,9 +76,11 @@ object LicenseRepository {
     }
 
     private fun saveSecureLicensePayload(info: LicenseInfo) {
-        val jsonStr = gson.toJson(info)
-        LicenseStorage.saveLastKnownKey(info.key)
-        val encrypted = KhaYinSecurityBridge.encryptPayload(jsonStr, info.key)
+        val safeKey = info.key.trim().uppercase()
+        val safeInfo = if (info.key == safeKey) info else info.copy(key = safeKey)
+        val jsonStr = gson.toJson(safeInfo)
+        LicenseStorage.saveLastKnownKey(safeKey)
+        val encrypted = KhaYinSecurityBridge.encryptPayload(jsonStr, safeKey)
         LicenseStorage.saveLicensePayload(encrypted)
     }
 
@@ -160,7 +162,6 @@ object LicenseRepository {
                 "p_key" to key,
                 "p_device_id" to deviceId,
                 "p_device_name" to "Android TV",
-                "p_nonce" to activationNonce,
             )
             val rpcPayload = gson.toJson(rpcPayloadMap)
             val rpcUrl = "$restUrl/rpc/activate_license"
@@ -186,7 +187,7 @@ object LicenseRepository {
                     throw IllegalStateException(err)
                 }
                 LicenseInfo(
-                    key = resp.key ?: key,
+                    key = resp.key?.trim()?.uppercase()?.takeIf { it.isNotBlank() } ?: key,
                     status = resp.status ?: "active",
                     customerName = resp.customerName,
                     tier = resp.tier ?: "standard",
@@ -225,7 +226,7 @@ object LicenseRepository {
                     throw IllegalStateException(err)
                 }
 
-                records.first().toLicenseInfo().copy(nonce = activationNonce)
+                records.first().toLicenseInfo(fallbackKey = key).copy(nonce = activationNonce)
             }
 
             if (info.status.equals("revoked", ignoreCase = true)) {
@@ -289,7 +290,7 @@ object LicenseRepository {
                 }.getOrNull()
 
                 if (!records.isNullOrEmpty()) {
-                    val updated = records.first().toLicenseInfo()
+                    val updated = records.first().toLicenseInfo(fallbackKey = key)
                     if (updated.status.equals("revoked", ignoreCase = true)) {
                         _state.value = LicenseState.Revoked(updated)
                     } else if (isExpiredTimestamp(updated.expiresAt)) {
@@ -313,3 +314,4 @@ object LicenseRepository {
         _error.value = null
     }
 }
+

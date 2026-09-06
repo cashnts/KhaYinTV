@@ -3,17 +3,17 @@ package dev.khayin.app.features.license
 import com.google.gson.annotations.SerializedName
 
 data class LicenseInfo(
-    val key: String,
-    val status: String = "active", // "active", "expired", "revoked"
-    val customerName: String? = null,
-    val tier: String? = "standard",
-    val expiresAt: String? = null, // null = Lifetime
-    val maxDevices: Int = 1,
-    val activeDevices: Int = 1,
-    val nonce: String? = null,
-    val profileName: String? = null,
-    val createdAt: String? = null,
-    val notes: String? = null,
+    @SerializedName("key") val key: String = "",
+    @SerializedName("status") val status: String = "active", // "active", "expired", "revoked"
+    @SerializedName("customer_name") val customerName: String? = null,
+    @SerializedName("tier") val tier: String? = "standard",
+    @SerializedName("expires_at") val expiresAt: String? = null, // null = Lifetime
+    @SerializedName("max_devices") val maxDevices: Int = 1,
+    @SerializedName("active_devices") val activeDevices: Int = 1,
+    @SerializedName("nonce") val nonce: String? = null,
+    @SerializedName("profile_name") val profileName: String? = null,
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("notes") val notes: String? = null,
 ) {
     val isLifetime: Boolean
         get() = expiresAt.isNullOrBlank() || expiresAt.equals("lifetime", ignoreCase = true)
@@ -25,35 +25,35 @@ data class LicenseInfo(
 }
 
 data class SupabaseLicenseRecord(
-    val key: String,
-    val status: String = "active",
+    @SerializedName("key") val key: String? = null,
+    @SerializedName("status") val status: String? = "active",
     @SerializedName("customer_name") val customerName: String? = null,
-    val tier: String? = "standard",
+    @SerializedName("tier") val tier: String? = "standard",
     @SerializedName("expires_at") val expiresAt: String? = null,
-    @SerializedName("max_devices") val maxDevices: Int = 1,
-    @SerializedName("active_devices") val activeDevices: Int = 0,
+    @SerializedName("max_devices") val maxDevices: Int? = 1,
+    @SerializedName("active_devices") val activeDevices: Int? = 0,
     @SerializedName("created_at") val createdAt: String? = null,
-    val notes: String? = null,
+    @SerializedName("notes") val notes: String? = null,
 ) {
-    fun toLicenseInfo(): LicenseInfo = LicenseInfo(
-        key = key,
-        status = status,
+    fun toLicenseInfo(fallbackKey: String = ""): LicenseInfo = LicenseInfo(
+        key = (key ?: fallbackKey).trim().uppercase(),
+        status = status ?: "active",
         customerName = customerName,
-        tier = tier,
+        tier = tier ?: "standard",
         expiresAt = expiresAt,
-        maxDevices = maxDevices,
-        activeDevices = activeDevices,
+        maxDevices = maxDevices ?: 1,
+        activeDevices = activeDevices ?: 0,
         createdAt = createdAt,
         notes = notes,
     )
 }
 
 data class SupabaseErrorResponse(
-    val message: String? = null,
-    val error: String? = null,
-    val details: String? = null,
-    val hint: String? = null,
-    val code: String? = null,
+    @SerializedName("message") val message: String? = null,
+    @SerializedName("error") val error: String? = null,
+    @SerializedName("details") val details: String? = null,
+    @SerializedName("hint") val hint: String? = null,
+    @SerializedName("code") val code: String? = null,
 )
 
 sealed interface LicenseState {
@@ -87,17 +87,17 @@ val LicenseState.activeInfo: LicenseInfo?
     }
 
 data class LicenseActivationResponse(
-    val success: Boolean = true,
+    @SerializedName("success") val success: Boolean = true,
     @SerializedName("expires_at") val expiresAt: String? = null,
     @SerializedName("max_device") val maxDevice: Int? = null,
     @SerializedName("max_devices") val maxDevices: Int? = null,
-    val nonce: String? = null,
-    val status: String? = null,
-    val key: String? = null,
+    @SerializedName("nonce") val nonce: String? = null,
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("key") val key: String? = null,
     @SerializedName("customer_name") val customerName: String? = null,
-    val tier: String? = null,
-    val error: String? = null,
-    val message: String? = null,
+    @SerializedName("tier") val tier: String? = null,
+    @SerializedName("error") val error: String? = null,
+    @SerializedName("message") val message: String? = null,
 ) {
     val resolvedMaxDevices: Int
         get() = maxDevices ?: maxDevice ?: 1

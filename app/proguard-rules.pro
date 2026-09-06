@@ -142,3 +142,7 @@
 -keepclassmembers class com.fasterxml.jackson.** { *; }
 -dontwarn java.beans.ConstructorProperties
 -dontwarn java.beans.Transient
+
+# ── KhaYin License & Admin Control ─────────────────────────────────────────────
+-keep class dev.khayin.app.features.license.** { *; }
+-keepclassmembers class dev.khayin.app.features.license.** { *; }
