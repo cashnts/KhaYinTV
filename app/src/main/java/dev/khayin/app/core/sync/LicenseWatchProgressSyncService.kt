@@ -59,6 +59,7 @@ class LicenseWatchProgressSyncService @Inject constructor(
         .build()
 
     fun getActiveLicenseKey(): String? {
+        if (LicenseRepository.isFreeUser) return null
         val keyFromState = (LicenseRepository.state.value as? LicenseState.Active)?.info?.key
         if (!keyFromState.isNullOrBlank()) return keyFromState
         val storedKey = LicenseStorage.loadLastKnownKey()

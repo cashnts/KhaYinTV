@@ -224,7 +224,13 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
-                    val addonStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
+                    val isMovie = type.equals("movie", ignoreCase = true) ||
+                        (seasonArg == null && episodeArg == null && !type.equals("series", ignoreCase = true))
+                    val cappedData = dev.khayin.app.features.license.FreeTierQualityLimiter.filterAddonStreamsForFreeTier(
+                        result.data,
+                        isMovie
+                    )
+                    val addonStreams = StreamAutoPlaySelector.orderAddonStreams(cappedData, installedAddonOrder)
                     val allStreams = addonStreams.flatMap { it.streams }
                     val availableAddons = addonStreams.map { it.addonName }
                     _uiState.update {

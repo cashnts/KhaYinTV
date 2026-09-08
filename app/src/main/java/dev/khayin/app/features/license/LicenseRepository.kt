@@ -46,6 +46,15 @@ object LicenseRepository {
             return current?.isPlus == true
         }
 
+    val isLicensed: Boolean
+        get() = _state.value is LicenseState.Active
+
+    val isFreeUser: Boolean
+        get() = _state.value !is LicenseState.Active
+
+    val hasAdFreeAccess: Boolean
+        get() = isLicensed
+
     private var initialized = false
     private var heartbeatJob: Job? = null
 
@@ -116,11 +125,19 @@ object LicenseRepository {
                     "customer_name" to (cachedInfo.customerName ?: "")
                 ))
             }
+        } else if (LicenseStorage.isFreeMode()) {
+            _state.value = LicenseState.Free
         } else {
             _state.value = LicenseState.Unlicensed
         }
 
         startHeartbeat()
+    }
+
+    fun continueForFree() {
+        LicenseStorage.saveFreeMode(true)
+        _state.value = LicenseState.Free
+        _error.value = null
     }
 
     fun startHeartbeat() {
@@ -266,6 +283,7 @@ object LicenseRepository {
             }
 
             saveSecureLicensePayload(info)
+            LicenseStorage.saveFreeMode(false)
             _state.value = LicenseState.Active(info)
             _error.value = null
             dev.khayin.app.core.analytics.PostHogAnalytics.identify(info.key, mapOf(
@@ -334,6 +352,7 @@ object LicenseRepository {
 
     fun deactivate() {
         LicenseStorage.clearLicensePayload()
+        LicenseStorage.saveFreeMode(false)
         _state.value = LicenseState.Unlicensed
         _error.value = null
     }

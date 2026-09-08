@@ -555,7 +555,12 @@ fun NuvioNavHost(
                                 infoHash = playbackInfo.infoHash,
                                 fileIdx = playbackInfo.fileIdx,
                                 sources = playbackInfo.sources,
-                                contentLanguage = playbackInfo.contentLanguage
+                                contentLanguage = playbackInfo.contentLanguage,
+                                prerollUrl = playbackInfo.prerollUrl,
+                                prerollDuration = playbackInfo.prerollDuration,
+                                prerollTitle = playbackInfo.prerollTitle,
+                                prerollSkippableAfter = playbackInfo.prerollSkippableAfter,
+                                prerollId = playbackInfo.prerollId
                             )
                         )
                     }
@@ -595,7 +600,12 @@ fun NuvioNavHost(
                                 infoHash = playbackInfo.infoHash,
                                 fileIdx = playbackInfo.fileIdx,
                                 sources = playbackInfo.sources,
-                                contentLanguage = playbackInfo.contentLanguage
+                                contentLanguage = playbackInfo.contentLanguage,
+                                prerollUrl = playbackInfo.prerollUrl,
+                                prerollDuration = playbackInfo.prerollDuration,
+                                prerollTitle = playbackInfo.prerollTitle,
+                                prerollSkippableAfter = playbackInfo.prerollSkippableAfter,
+                                prerollId = playbackInfo.prerollId
                             )
                         ) {
                             popUpTo(Screen.Stream.route) { inclusive = true }
@@ -741,6 +751,31 @@ fun NuvioNavHost(
                     defaultValue = null
                 },
                 navArgument("launchStartedAtMs") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("prerollUrl") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("prerollDuration") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("prerollTitle") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("prerollSkippableAfter") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("prerollId") {
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null

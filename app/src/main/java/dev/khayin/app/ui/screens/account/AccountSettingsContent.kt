@@ -161,6 +161,62 @@ fun AccountSettingsContent(
                     )
                 }
             }
+            is dev.khayin.app.features.license.LicenseState.Free -> {
+                item(key = "license_free_card") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                color = Color.White.copy(alpha = 0.05f),
+                                shape = RoundedCornerShape(NuvioTheme.radii.sm)
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = Color.White.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(NuvioTheme.radii.sm)
+                            )
+                            .padding(14.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Current Plan: Free (Ad-Supported)",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NuvioTheme.colors.TextPrimary
+                                )
+                                Text(
+                                    text = "Free Tier",
+                                    fontSize = 11.sp,
+                                    color = NuvioTheme.colors.TextSecondary
+                                )
+                            }
+                            Text(
+                                text = "Local watch progress • 720p/1080p max • 2 Myanmar sub movies/day",
+                                fontSize = 12.sp,
+                                color = NuvioTheme.colors.TextSecondary
+                            )
+                        }
+                    }
+                }
+                item(key = "license_activate_btn") {
+                    SettingsActionButton(
+                        icon = Icons.Default.VpnKey,
+                        title = "Upgrade with License Key",
+                        subtitle = "Enter standard or plus license to remove ads and unlock features",
+                        onClick = { showLicenseDialog = true },
+                        modifier = if (initialFocusRequester != null) {
+                            Modifier.focusRequester(initialFocusRequester)
+                        } else {
+                            Modifier
+                        }
+                    )
+                }
+            }
             else -> {
                 item(key = "license_unlicensed_card") {
                     SettingsActionButton(

@@ -28,8 +28,16 @@ fun StreamDto.toDomain(addonName: String, addonLogo: String?): Stream = Stream(
     addonName = addonName,
     addonLogo = addonLogo,
     sources = sources,
-    clientResolve = clientResolve?.toDomain()
+    clientResolve = clientResolve?.toDomain(),
+    preroll = preroll?.toDomain()
 )
+
+fun dev.khayin.app.data.remote.dto.StreamPrerollDto.toDomain(): dev.khayin.app.domain.model.StreamPreroll =
+    dev.khayin.app.domain.model.StreamPreroll(
+        url = url,
+        duration = duration,
+        title = title
+    )
 
 fun StreamClientResolveDto.toDomain(): StreamClientResolve = StreamClientResolve(
     type = type,
@@ -98,7 +106,10 @@ fun BehaviorHintsDto.toDomain(): StreamBehaviorHints = StreamBehaviorHints(
     proxyHeaders = proxyHeaders?.toDomain(),
     videoHash = videoHash,
     videoSize = videoSize,
-    filename = filename
+    filename = filename,
+    prerollUrl = prerollUrl,
+    prerollDuration = prerollDuration,
+    prerollTitle = prerollTitle
 )
 
 fun ProxyHeadersDto.toDomain(): ProxyHeaders = ProxyHeaders(

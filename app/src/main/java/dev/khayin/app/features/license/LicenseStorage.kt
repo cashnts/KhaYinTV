@@ -9,6 +9,7 @@ object LicenseStorage {
     private const val lastKnownKey = "last_known_license_key"
     private const val deviceIdKey = "device_unique_id"
     private const val dismissedBroadcastKey = "dismissed_broadcast_timestamp"
+    private const val freeModeKey = "free_mode_enabled"
 
     private var preferences: SharedPreferences? = null
 
@@ -46,5 +47,12 @@ object LicenseStorage {
 
     fun saveDismissedBroadcastTimestamp(timestamp: Long) {
         preferences?.edit()?.putLong(dismissedBroadcastKey, timestamp)?.apply()
+    }
+
+    fun isFreeMode(): Boolean =
+        preferences?.getBoolean(freeModeKey, false) ?: false
+
+    fun saveFreeMode(enabled: Boolean) {
+        preferences?.edit()?.putBoolean(freeModeKey, enabled)?.apply()
     }
 }

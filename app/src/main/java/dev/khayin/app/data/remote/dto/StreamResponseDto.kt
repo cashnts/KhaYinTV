@@ -21,7 +21,8 @@ data class StreamDto(
     @Json(name = "behaviorHints") val behaviorHints: BehaviorHintsDto? = null,
     @Json(name = "sources") val sources: List<String>? = null,
     @Json(name = "subtitles") val subtitles: List<SubtitleDto>? = null,
-    @Json(name = "clientResolve") val clientResolve: StreamClientResolveDto? = null
+    @Json(name = "clientResolve") val clientResolve: StreamClientResolveDto? = null,
+    @Json(name = "preroll") val preroll: StreamPrerollDto? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -96,7 +97,17 @@ data class BehaviorHintsDto(
     @Json(name = "proxyHeaders") val proxyHeaders: ProxyHeadersDto? = null,
     @Json(name = "videoHash") val videoHash: String? = null,
     @Json(name = "videoSize") val videoSize: Long? = null,
-    @Json(name = "filename") val filename: String? = null
+    @Json(name = "filename") val filename: String? = null,
+    @Json(name = "prerollUrl") val prerollUrl: String? = null,
+    @Json(name = "prerollDuration") val prerollDuration: Int? = null,
+    @Json(name = "prerollTitle") val prerollTitle: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class StreamPrerollDto(
+    @Json(name = "url") val url: String? = null,
+    @Json(name = "duration") val duration: Int? = null,
+    @Json(name = "title") val title: String? = null
 )
 
 @JsonClass(generateAdapter = true)

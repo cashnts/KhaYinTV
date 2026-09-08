@@ -241,11 +241,50 @@ object PlayerSubtitleUtils {
         return listOf(mergedCue) + positioned
     }
 
+    fun isBurmeseTrack(track: TrackInfo): Boolean {
+        val code = track.language?.trim().orEmpty()
+        val lbl = track.name.trim()
+        val id = track.trackId?.trim().orEmpty()
+        val combined = "$code $lbl $id".trim()
+
+        val normalizedCode = normalizeLanguageCode(code).lowercase().substringBefore('-')
+        val normalizedLabel = normalizeLanguageCode(lbl).lowercase().substringBefore('-')
+
+        return normalizedCode == "my" || normalizedCode == "mya" || normalizedCode == "bur" ||
+               normalizedLabel == "my" || normalizedLabel == "mya" || normalizedLabel == "bur" ||
+               combined.contains("burmese", ignoreCase = true) ||
+               combined.contains("myanmar", ignoreCase = true) ||
+               combined.contains("mmsub", ignoreCase = true) ||
+               combined.contains("မြန်မာ", ignoreCase = true) ||
+               code.equals("my", ignoreCase = true) ||
+               code.equals("bur", ignoreCase = true) ||
+               code.equals("mya", ignoreCase = true)
+    }
+
+    fun isBurmeseSubtitle(subtitle: dev.khayin.app.domain.model.Subtitle): Boolean {
+        val code = subtitle.lang.trim()
+        val addon = subtitle.addonName.trim()
+        val id = subtitle.id.trim()
+        val combined = "$code $addon $id ${subtitle.url}".trim()
+
+        val normalizedCode = normalizeLanguageCode(code).lowercase().substringBefore('-')
+
+        return normalizedCode == "my" || normalizedCode == "mya" || normalizedCode == "bur" ||
+               combined.contains("burmese", ignoreCase = true) ||
+               combined.contains("myanmar", ignoreCase = true) ||
+               combined.contains("mmsub", ignoreCase = true) ||
+               combined.contains("မြန်မာ", ignoreCase = true) ||
+               subtitle.url.contains("stream.khayin.net", ignoreCase = true) ||
+               code.equals("my", ignoreCase = true) ||
+               code.equals("bur", ignoreCase = true) ||
+               code.equals("mya", ignoreCase = true)
+    }
+
     /**
-     * Checks if an internal subtitle track is allowed based on language and user tier (Plus vs Standard).
-     * Allowed: English, Chinese, and Burmese (Plus only).
+     * Checks if an internal subtitle track is allowed based on language and user tier/access.
+     * Allowed: English, Chinese, and Burmese (when hasMyanmarAccess is true).
      */
-    fun isAllowedSubtitleTrack(track: TrackInfo, isPlus: Boolean): Boolean {
+    fun isAllowedSubtitleTrack(track: TrackInfo, hasMyanmarAccess: Boolean): Boolean {
         val code = track.language?.trim().orEmpty()
         val lbl = track.name.trim()
         val id = track.trackId?.trim().orEmpty()
@@ -270,27 +309,19 @@ object PlayerSubtitleUtils {
                         code.equals("chi", ignoreCase = true) ||
                         code.equals("zho", ignoreCase = true)
 
-        val isBurmese = normalizedCode == "my" || normalizedCode == "mya" || normalizedCode == "bur" ||
-                        normalizedLabel == "my" || normalizedLabel == "mya" || normalizedLabel == "bur" ||
-                        combined.contains("burmese", ignoreCase = true) ||
-                        combined.contains("myanmar", ignoreCase = true) ||
-                        combined.contains("mmsub", ignoreCase = true) ||
-                        combined.contains("မြန်မာ", ignoreCase = true) ||
-                        code.equals("my", ignoreCase = true) ||
-                        code.equals("bur", ignoreCase = true) ||
-                        code.equals("mya", ignoreCase = true)
+        val isBurmese = isBurmeseTrack(track)
 
         return when {
-            isPlus -> isEnglish || isChinese || isBurmese
+            hasMyanmarAccess -> isEnglish || isChinese || isBurmese
             else -> isEnglish || isChinese
         }
     }
 
     /**
-     * Checks if an addon subtitle is allowed based on language and user tier (Plus vs Standard).
-     * Allowed: English, Chinese, and Burmese (Plus only).
+     * Checks if an addon subtitle is allowed based on language and user tier/access.
+     * Allowed: English, Chinese, and Burmese (when hasMyanmarAccess is true).
      */
-    fun isAllowedAddonSubtitle(subtitle: dev.khayin.app.domain.model.Subtitle, isPlus: Boolean): Boolean {
+    fun isAllowedAddonSubtitle(subtitle: dev.khayin.app.domain.model.Subtitle, hasMyanmarAccess: Boolean): Boolean {
         val code = subtitle.lang.trim()
         val addon = subtitle.addonName.trim()
         val id = subtitle.id.trim()
@@ -312,18 +343,10 @@ object PlayerSubtitleUtils {
                         code.equals("chi", ignoreCase = true) ||
                         code.equals("zho", ignoreCase = true)
 
-        val isBurmese = normalizedCode == "my" || normalizedCode == "mya" || normalizedCode == "bur" ||
-                        combined.contains("burmese", ignoreCase = true) ||
-                        combined.contains("myanmar", ignoreCase = true) ||
-                        combined.contains("mmsub", ignoreCase = true) ||
-                        combined.contains("မြန်မာ", ignoreCase = true) ||
-                        subtitle.url.contains("stream.khayin.net", ignoreCase = true) ||
-                        code.equals("my", ignoreCase = true) ||
-                        code.equals("bur", ignoreCase = true) ||
-                        code.equals("mya", ignoreCase = true)
+        val isBurmese = isBurmeseSubtitle(subtitle)
 
         return when {
-            isPlus -> isEnglish || isChinese || isBurmese
+            hasMyanmarAccess -> isEnglish || isChinese || isBurmese
             else -> isEnglish || isChinese
         }
     }
@@ -331,7 +354,7 @@ object PlayerSubtitleUtils {
     /**
      * Checks if a language code / label is allowed for subtitle options.
      */
-    fun isAllowedSubtitleLanguageCode(code: String?, label: String? = null, isPlus: Boolean): Boolean {
+    fun isAllowedSubtitleLanguageCode(code: String?, label: String? = null, hasMyanmarAccess: Boolean): Boolean {
         val raw = code?.trim().orEmpty()
         val lbl = label?.trim().orEmpty()
         val combined = "$raw $lbl".trim()
@@ -362,7 +385,7 @@ object PlayerSubtitleUtils {
                         raw.equals("mya", ignoreCase = true)
 
         return when {
-            isPlus -> isEnglish || isChinese || isBurmese
+            hasMyanmarAccess -> isEnglish || isChinese || isBurmese
             else -> isEnglish || isChinese
         }
     }

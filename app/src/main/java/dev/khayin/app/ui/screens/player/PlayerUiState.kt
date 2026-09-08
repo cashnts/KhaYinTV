@@ -63,11 +63,17 @@ data class PlayerUiState(
     val playbackEnded: Boolean = false,
     val pendingExitReason: PlayerExitReason? = null,
     val title: String = "",
+    val contentId: String? = null,
     val contentName: String? = null, // Series/show name (for series content)
     val releaseYear: String? = null, // Release year for movies
     val contentType: String? = null,
     val currentStreamName: String? = null, // Name of the current stream source
     val currentStreamUrl: String? = null,
+    val isPrerollActive: Boolean = false,
+    val prerollTitle: String? = null,
+    val prerollNotice: String? = null,
+    val canSkipPreroll: Boolean = false,
+    val prerollSkippableAfter: Int = 5,
     val currentStreamInfoHash: String? = null, // InfoHash of the currently playing stream (for debrid matching)
     val currentStreamFileIdx: Int? = null, // FileIdx of the currently playing stream (for debrid matching)
     val currentStreamAddonName: String? = null, // Addon name of the currently playing stream
@@ -316,6 +322,7 @@ sealed class PlayerEvent {
     data class OnShowDisplayModeInfo(val info: DisplayModeInfo) : PlayerEvent()
     data object OnHideDisplayModeInfo : PlayerEvent()
     data object OnDismissPauseOverlay : PlayerEvent()
+    data object OnSkipPreroll : PlayerEvent()
     data object OnSkipIntro : PlayerEvent()
     data object OnDismissSkipIntro : PlayerEvent()
     data object OnPlayNextEpisode : PlayerEvent()

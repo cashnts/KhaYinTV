@@ -63,6 +63,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.compose.material.icons.filled.PlayArrow
 import dev.khayin.app.R
 import dev.khayin.app.features.license.LicenseRepository
 import dev.khayin.app.features.license.LicenseState
@@ -81,7 +82,8 @@ private val AccentGreen = Color(0xFF00E676)
 
 @Composable
 fun LicenseGateScreen(
-    onExit: () -> Unit
+    onExit: () -> Unit,
+    onContinueForFree: () -> Unit = {}
 ) {
     val licenseState by LicenseRepository.state.collectAsState()
     val repoError by LicenseRepository.error.collectAsState()
@@ -416,6 +418,32 @@ fun LicenseGateScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                             }
+                        }
+                    }
+
+                    Button(
+                        onClick = onContinueForFree,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.colors(
+                            containerColor = Color.White.copy(alpha = 0.08f),
+                            focusedContainerColor = AccentGreen,
+                            contentColor = TextPrimary,
+                            focusedContentColor = Color.Black
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = "Continue for Free (with Ads)", fontWeight = FontWeight.Bold)
                         }
                     }
                 }

@@ -55,7 +55,7 @@ class SubtitleRepositoryImpl @Inject constructor(
             return@withContext emptyList()
         }
 
-        val isPlus = dev.khayin.app.features.license.LicenseRepository.isPlusMember
+        val hasMyanmarAccess = dev.khayin.app.features.license.MyanmarSubLimiter.canAccessMyanmarSub(context, id)
 
         // Filter addons that support subtitles resource
         val subtitleAddons = addons.filter { addon ->
@@ -63,8 +63,8 @@ class SubtitleRepositoryImpl @Inject constructor(
                 isSubtitleResource(resource.name) && supportsType(addon, resource, requestType, id)
             }
             if (!supportsResource) return@filter false
-            if (!isPlus) {
-                // If not Plus (standard tier), skip addons specifically for Burmese/MMSub translation
+            if (!hasMyanmarAccess) {
+                // If user doesn't have Myanmar access (Standard license, or Free daily quota reached), skip Burmese addons
                 val isBurmeseAddon = addon.name.contains("mmsub", ignoreCase = true) ||
                     addon.name.contains("khayin", ignoreCase = true) ||
                     addon.baseUrl.contains("stream.khayin.net", ignoreCase = true) ||
@@ -75,7 +75,7 @@ class SubtitleRepositoryImpl @Inject constructor(
             true
         }
         
-        Log.d(TAG, "Found ${subtitleAddons.size} subtitle addons (isPlus=$isPlus): ${subtitleAddons.map { it.name }}")
+        Log.d(TAG, "Found ${subtitleAddons.size} subtitle addons (hasMyanmarAccess=$hasMyanmarAccess): ${subtitleAddons.map { it.name }}")
 
         if (subtitleAddons.isEmpty()) {
             return@withContext emptyList()
@@ -113,7 +113,7 @@ class SubtitleRepositoryImpl @Inject constructor(
                         )
                         emptyList()
                     }
-                    val subtitles = rawSubtitles?.filter { dev.khayin.app.ui.screens.player.PlayerSubtitleUtils.isAllowedAddonSubtitle(it, isPlus) }
+                    val subtitles = rawSubtitles?.filter { dev.khayin.app.ui.screens.player.PlayerSubtitleUtils.isAllowedAddonSubtitle(it, hasMyanmarAccess) }
                     onProgress?.invoke(completedCount.incrementAndGet(), total, addon.displayName)
                     if (!subtitles.isNullOrEmpty()) {
                         val snapshot = synchronized(accumulatedSubtitles) {

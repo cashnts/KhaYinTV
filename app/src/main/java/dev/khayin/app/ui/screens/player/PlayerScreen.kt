@@ -649,6 +649,7 @@ fun PlayerScreen(
                     when (keyEvent.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_DPAD_LEFT,
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            if (uiState.isPrerollActive) return@onKeyEvent true
                             if (!uiState.showControls) {
                                 viewModel.onEvent(PlayerEvent.OnCommitPreviewSeek)
                                 return@onKeyEvent true
@@ -690,6 +691,7 @@ fun PlayerScreen(
                         }
                         KeyEvent.KEYCODE_DPAD_LEFT,
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            if (uiState.isPrerollActive) return@onKeyEvent true
                             val overlayButtonsCoexist = skipButtonActuallyVisible &&
                                 uiState.postPlayMode is PostPlayMode.AutoPlay
                             if (!uiState.showControls && !overlayButtonsCoexist) {
@@ -762,6 +764,7 @@ fun PlayerScreen(
                             true
                         }
                         KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                            if (uiState.isPrerollActive) return@onKeyEvent true
                             viewModel.onEvent(
                                 PlayerEvent.OnSeekBy(
                                     PlayerScrubRates.deltaMsForKeyRepeat(
@@ -773,6 +776,7 @@ fun PlayerScreen(
                             true
                         }
                         KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                            if (uiState.isPrerollActive) return@onKeyEvent true
                             viewModel.onEvent(
                                 PlayerEvent.OnSeekBy(
                                     PlayerScrubRates.deltaMsForKeyRepeat(
@@ -816,7 +820,7 @@ fun PlayerScreen(
         }
 
         LoadingOverlay(
-            visible = uiState.showLoadingOverlay && uiState.error == null,
+            visible = uiState.showLoadingOverlay && uiState.error == null && !uiState.isPrerollActive,
             backdropUrl = uiState.backdrop,
             logoUrl = uiState.logo,
             title = uiState.title,
@@ -970,6 +974,19 @@ fun PlayerScreen(
                 .padding(start = NuvioTheme.spacing.xxl, bottom = skipButtonBottomPadding)
                 .zIndex(2.1f)
         )
+
+        PrerollNoticeOverlay(
+            visible = uiState.isPrerollActive,
+            title = uiState.prerollTitle,
+            notice = uiState.prerollNotice,
+            canSkip = uiState.canSkipPreroll,
+            skippableAfter = uiState.prerollSkippableAfter,
+            onSkip = { viewModel.onEvent(PlayerEvent.OnSkipPreroll) },
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(2.9f)
+        )
+
         PostPlayOverlay(
             mode = uiState.postPlayMode.takeIf {
                 uiState.error == null &&
@@ -1053,7 +1070,7 @@ fun PlayerScreen(
 
         // Controls overlay
         AnimatedVisibility(
-            visible = uiState.showControls && uiState.error == null &&
+            visible = uiState.showControls && uiState.error == null && !uiState.isPrerollActive &&
                 !uiState.showLoadingOverlay && !uiState.showPauseOverlay &&
                 !uiState.showStreamInfoOverlay &&
                 !uiState.showSubtitleStylePanel &&
@@ -1390,6 +1407,7 @@ fun PlayerScreen(
             subtitleDelayMs = uiState.subtitleDelayMs,
             installedSubtitleAddonOrder = uiState.installedSubtitleAddonOrder,
             isLoadingAddons = uiState.isLoadingAddonSubtitles,
+            contentId = uiState.contentId,
             onInternalTrackSelected = { viewModel.onEvent(PlayerEvent.OnSelectSubtitleTrack(it)) },
             onAddonSubtitleSelected = { viewModel.onEvent(PlayerEvent.OnSelectAddonSubtitle(it)) },
             onDisableSubtitles = { viewModel.onEvent(PlayerEvent.OnDisableSubtitles) },

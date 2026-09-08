@@ -522,6 +522,7 @@ internal fun PlayerRuntimeController.seekPlaybackTo(
     positionMs: Long,
     seekParameters: SeekParameters = SeekParameters.CLOSEST_SYNC
 ) {
+    if (_uiState.value.isPrerollActive) return
     if (isUsingMpvEngine()) {
         mpvView?.let { view ->
             view.seekToMs(positionMs)

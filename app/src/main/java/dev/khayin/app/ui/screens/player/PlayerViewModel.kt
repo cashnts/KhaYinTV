@@ -74,6 +74,7 @@ class PlayerViewModel @Inject constructor(
     private val externalPlaybackTracker: dev.khayin.app.core.player.ExternalPlaybackTracker,
     private val subtitleFileCache: dev.khayin.app.core.player.SubtitleFileCache,
     private val tvRecommendationManager: dev.khayin.app.core.recommendations.TvRecommendationManager,
+    private val subtitleJitManager: dev.khayin.app.features.subtitles.jit.SubtitleJitManager,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -117,6 +118,7 @@ class PlayerViewModel @Inject constructor(
         streamBadgePresentation = streamBadgePresentation,
         playbackIssueReportRepository = playbackIssueReportRepository,
         tvRecommendationManager = tvRecommendationManager,
+        subtitleJitManager = subtitleJitManager,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
     )

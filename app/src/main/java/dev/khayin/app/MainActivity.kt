@@ -529,9 +529,13 @@ class MainActivity : ComponentActivity() {
                         return@Surface
                     }
 
-                    if (licenseState !is dev.khayin.app.features.license.LicenseState.Active) {
+                    if (licenseState !is dev.khayin.app.features.license.LicenseState.Active &&
+                        licenseState !is dev.khayin.app.features.license.LicenseState.Free) {
                         dev.khayin.app.features.license.ui.LicenseGateScreen(
-                            onExit = { finish() }
+                            onExit = { finish() },
+                            onContinueForFree = {
+                                dev.khayin.app.features.license.LicenseRepository.continueForFree()
+                            }
                         )
                         return@Surface
                     }

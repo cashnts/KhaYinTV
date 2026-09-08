@@ -88,6 +88,7 @@ class StreamScreenViewModel @Inject constructor(
     private val subtitleRepository: dev.khayin.app.domain.repository.SubtitleRepository,
     private val subtitleFileCache: dev.khayin.app.core.player.SubtitleFileCache,
     private val torrentService: TorrentService,
+    private val adsRepository: dev.khayin.app.data.repository.AdsRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
@@ -391,6 +392,7 @@ class StreamScreenViewModel @Inject constructor(
                 if (cached != null) {
                     autoPlayHandledForSession = true
                     resolvedAutoPlayTarget = true
+                    val adInfo = resolvePrerollAd(null)
                     val isCachedTorrent = cached.infoHash != null && cached.url.isNullOrBlank()
                     val showOverlay = playerSettings.playerPreference == PlayerPreference.EXTERNAL
                     updateUiStateIfChanged {
@@ -421,7 +423,12 @@ class StreamScreenViewModel @Inject constructor(
                                 videoSize = cached.videoSize,
                                 fileIdx = cached.fileIdx,
                                 sources = cached.sources,
-                                contentLanguage = cached.contentLanguage ?: contentLanguage
+                                contentLanguage = cached.contentLanguage ?: contentLanguage,
+                                prerollUrl = adInfo.url,
+                                prerollDuration = adInfo.duration,
+                                prerollTitle = adInfo.title,
+                                prerollSkippableAfter = adInfo.skippableAfter,
+                                prerollId = adInfo.id
                             ),
                             showDirectAutoPlayOverlay = showOverlay || it.showDirectAutoPlayOverlay,
                             isDirectAutoPlayFlow = showOverlay || it.isDirectAutoPlayFlow
@@ -448,8 +455,14 @@ class StreamScreenViewModel @Inject constructor(
             } else null
 
             fun applySuccess(addonStreamGroups: List<AddonStreams>, isAllLoaded: Boolean) {
-                val orderedAddonStreams = StreamAutoPlaySelector.orderAddonStreams(
+                val isMovieContent = contentType.equals("movie", ignoreCase = true) ||
+                    (season == null && episode == null && !contentType.equals("series", ignoreCase = true))
+                val cappedStreamGroups = dev.khayin.app.features.license.FreeTierQualityLimiter.filterAddonStreamsForFreeTier(
                     addonStreamGroups,
+                    isMovieContent
+                )
+                val orderedAddonStreams = StreamAutoPlaySelector.orderAddonStreams(
+                    cappedStreamGroups,
                     installedAddonOrder
                 )
 
@@ -1289,11 +1302,52 @@ class StreamScreenViewModel @Inject constructor(
         }
     }
 
+    private data class StreamPrerollAdInfo(
+        val url: String? = null,
+        val duration: Int? = null,
+        val title: String? = null,
+        val skippableAfter: Int? = 5,
+        val id: String? = null
+    )
+
+    private suspend fun resolvePrerollAd(stream: Stream?): StreamPrerollAdInfo {
+        val isMovieContent = contentType.equals("movie", ignoreCase = true) ||
+            (season == null && episode == null && !contentType.equals("series", ignoreCase = true))
+        if (!dev.khayin.app.features.license.LicenseRepository.isFreeUser || !isMovieContent) {
+            return StreamPrerollAdInfo()
+        }
+
+        return when (val adResult = adsRepository.getNextAd()) {
+            is dev.khayin.app.data.repository.AdsResult.Available -> {
+                StreamPrerollAdInfo(
+                    url = adResult.ad.url,
+                    duration = adResult.ad.duration,
+                    title = adResult.ad.title,
+                    skippableAfter = adResult.ad.skippableAfter ?: 5,
+                    id = adResult.ad.id
+                )
+            }
+            is dev.khayin.app.data.repository.AdsResult.Disabled -> {
+                StreamPrerollAdInfo()
+            }
+            is dev.khayin.app.data.repository.AdsResult.Unavailable -> {
+                StreamPrerollAdInfo(
+                    url = stream?.getPrerollUrl(),
+                    duration = stream?.getPrerollDuration(),
+                    title = stream?.getPrerollTitle(),
+                    skippableAfter = 5,
+                    id = stream?.getPrerollId()
+                )
+            }
+        }
+    }
+
     /**
      * Gets the selected stream for playback
      */
-    fun getStreamForPlayback(stream: Stream): StreamPlaybackInfo {
+    suspend fun getStreamForPlayback(stream: Stream): StreamPlaybackInfo {
         cancelStreamsLoad()
+        val adInfo = resolvePrerollAd(stream)
         val playbackInfo = StreamPlaybackInfo(
             url = stream.getStreamUrl(),
             title = _uiState.value.title,
@@ -1323,7 +1377,12 @@ class StreamScreenViewModel @Inject constructor(
             streamDescription = stream.description,
             fileIdx = stream.getEffectiveFileIdx(),
             sources = stream.sources,
-            contentLanguage = contentLanguage
+            contentLanguage = contentLanguage,
+            prerollUrl = adInfo.url,
+            prerollDuration = adInfo.duration,
+            prerollTitle = adInfo.title,
+            prerollSkippableAfter = adInfo.skippableAfter,
+            prerollId = adInfo.id
         )
 
         val url = playbackInfo.url
@@ -1835,7 +1894,12 @@ data class StreamPlaybackInfo(
     val streamDescription: String? = null,
     val fileIdx: Int? = null,
     val sources: List<String>? = null,
-    val contentLanguage: String? = null
+    val contentLanguage: String? = null,
+    val prerollUrl: String? = null,
+    val prerollDuration: Int? = null,
+    val prerollTitle: String? = null,
+    val prerollSkippableAfter: Int? = 5,
+    val prerollId: String? = null
 )
 
 private fun Stream.isReadyForDebridPreparation(): Boolean =

@@ -10,22 +10,61 @@ import dev.khayin.app.core.debrid.DebridProviders
 data class Stream(
     val name: String?,
     val title: String?,
-    val description: String?,
+    val description: String? = null,
     val url: String?,
-    val ytId: String?,
-    val infoHash: String?,
-    val fileIdx: Int?,
-    val externalUrl: String?,
-    val behaviorHints: StreamBehaviorHints?,
-    val addonName: String,
-    val addonLogo: String?,
+    val ytId: String? = null,
+    val infoHash: String? = null,
+    val fileIdx: Int? = null,
+    val externalUrl: String? = null,
+    val behaviorHints: StreamBehaviorHints? = null,
+    val addonName: String = "",
+    val addonLogo: String? = null,
     val sources: List<String>? = null,
     val quality: String? = null,
     val qualityValue: Int = -1,
     val clientResolve: StreamClientResolve? = null,
     val debridCacheStatus: StreamDebridCacheStatus? = null,
-    val badges: List<StreamBadge> = emptyList()
+    val badges: List<StreamBadge> = emptyList(),
+    val preroll: StreamPreroll? = null
 ) {
+    /**
+     * Returns the pre-roll intro/ad video URL if configured on the stream or behavior hints.
+     */
+    fun getPrerollUrl(): String? =
+        preroll?.url?.takeIf { it.isNotBlank() }
+            ?: behaviorHints?.prerollUrl?.takeIf { it.isNotBlank() }
+
+    fun getPrerollDuration(): Int? =
+        preroll?.duration ?: behaviorHints?.prerollDuration
+
+    fun getPrerollTitle(): String? =
+        preroll?.title?.takeIf { it.isNotBlank() }
+            ?: behaviorHints?.prerollTitle?.takeIf { it.isNotBlank() }
+
+    fun getPrerollId(): String? =
+        preroll?.id?.takeIf { it.isNotBlank() }
+
+    /**
+     * Detects stream resolution height (e.g. 2160, 1440, 1080, 720, 480). Returns -1 if unknown.
+     */
+    fun detectResolutionP(): Int {
+        clientResolve?.stream?.raw?.parsed?.resolution?.let { resStr ->
+            val num = resStr.filter { it.isDigit() }.toIntOrNull()
+            if (num != null) return num
+        }
+        val combined = "${quality.orEmpty()} ${name.orEmpty()} ${title.orEmpty()} ${description.orEmpty()}".lowercase()
+        return when {
+            Regex("""(?i)\b(2160p?|4k|uhd)\b""").containsMatchIn(combined) -> 2160
+            Regex("""(?i)\b(1440p?|2k|qhd)\b""").containsMatchIn(combined) -> 1440
+            Regex("""(?i)\b(1080p?|fhd)\b""").containsMatchIn(combined) -> 1080
+            Regex("""(?i)\b(720p?|hd)\b""").containsMatchIn(combined) -> 720
+            Regex("""(?i)\b(576p?)\b""").containsMatchIn(combined) -> 576
+            Regex("""(?i)\b(480p?|sd)\b""").containsMatchIn(combined) -> 480
+            Regex("""(?i)\b(360p?)\b""").containsMatchIn(combined) -> 360
+            else -> -1
+        }
+    }
+
     /**
      * Returns the primary stream source URL
      */
@@ -186,7 +225,19 @@ data class StreamBehaviorHints(
     val proxyHeaders: ProxyHeaders?,
     val videoHash: String? = null,
     val videoSize: Long? = null,
-    val filename: String? = null
+    val filename: String? = null,
+    val prerollUrl: String? = null,
+    val prerollDuration: Int? = null,
+    val prerollTitle: String? = null
+)
+
+@Immutable
+data class StreamPreroll(
+    val url: String?,
+    val duration: Int? = null,
+    val title: String? = null,
+    val skippableAfter: Int? = 5,
+    val id: String? = null,
 )
 
 @Immutable

@@ -35,7 +35,12 @@ internal data class PlayerNavigationArgs(
     val cloudSessionToken: String?,
     val rememberedAudioLanguage: String?,
     val rememberedAudioName: String?,
-    val launchStartedAtMs: Long?
+    val launchStartedAtMs: Long?,
+    val prerollUrl: String? = null,
+    val prerollDuration: Int? = null,
+    val prerollTitle: String? = null,
+    val prerollSkippableAfter: Int? = null,
+    val prerollId: String? = null
 ) {
     val torrentTrackers: List<String>
         get() {
@@ -94,7 +99,12 @@ internal data class PlayerNavigationArgs(
                 cloudSessionToken = decodedOrNull("cloudSessionToken"),
                 rememberedAudioLanguage = decodedOrNull("rememberedAudioLanguage"),
                 rememberedAudioName = decodedOrNull("rememberedAudioName"),
-                launchStartedAtMs = savedStateHandle.get<String>("launchStartedAtMs")?.toLongOrNull()
+                launchStartedAtMs = savedStateHandle.get<String>("launchStartedAtMs")?.toLongOrNull(),
+                prerollUrl = decodedOrNull("prerollUrl"),
+                prerollDuration = savedStateHandle.get<String>("prerollDuration")?.toIntOrNull(),
+                prerollTitle = decodedOrNull("prerollTitle"),
+                prerollSkippableAfter = savedStateHandle.get<String>("prerollSkippableAfter")?.toIntOrNull(),
+                prerollId = decodedOrNull("prerollId")
             )
         }
     }

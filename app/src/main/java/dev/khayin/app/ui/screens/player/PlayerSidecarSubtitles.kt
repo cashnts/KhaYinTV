@@ -88,6 +88,7 @@ internal fun PlayerRuntimeController.bindExoSubtitleView(subtitleView: SubtitleV
 }
 
 internal fun PlayerRuntimeController.stopSidecarAddonSubtitle(clearView: Boolean = true) {
+    subtitleJitManager.stopSession()
     sidecarSubtitleJob?.cancel()
     sidecarSubtitleJob = null
     activeSidecarSubtitleKey = null
@@ -196,36 +197,36 @@ internal fun PlayerRuntimeController.startSidecarAddonSubtitle(subtitle: Subtitl
                     "(buffer preserved)"
             )
 
-            // For on-demand generated subtitles: poll in background to seamlessly update newer cues
-            val isOnDemandCandidate = subtitle.url.contains("stream.khayin.net", ignoreCase = true) ||
-                subtitle.addonName?.contains("KhaYin", ignoreCase = true) == true
-            if (isOnDemandCandidate && parseResult.cues.size < 500) {
-                scope.launch {
-                    var lastCount = parseResult.cues.size
-                    var attempts = 0
-                    while (isActive && activeSidecarSubtitleKey == subtitleKey && attempts < 15) {
-                        delay(10_000L) // poll every 10 seconds
-                        if (activeSidecarSubtitleKey != subtitleKey) break
-                        attempts++
+            // For KhaYin JIT generated subtitles: coordinate player heartbeats and progressive section updates
+            if (subtitleJitManager.isJitSubtitle(subtitle.url, subtitle.addonName)) {
+                val mediaType = if (contentType?.lowercase() in listOf("series", "tv")) "series" else "movie"
+                val mediaId = videoId ?: contentId ?: "anonymous"
+                subtitleJitManager.startSession(
+                    mediaId = mediaId,
+                    type = mediaType,
+                    subtitleUrl = subtitle.url,
+                    onNewCuesAvailable = { url ->
+                        if (activeSidecarSubtitleKey != subtitleKey) return@startSession
                         try {
-                            val nextBody = downloadSubtitleBody(subtitle.url, subtitle.lang)
-                            if (activeSidecarSubtitleKey != subtitleKey) break
+                            val nextBody = downloadSubtitleBody(url, subtitle.lang)
+                            if (activeSidecarSubtitleKey != subtitleKey) return@startSession
                             val nextParse = withContext(Dispatchers.Default) {
-                                parseSidecarTimedCuesRobust(nextBody, subtitle.url)
+                                parseSidecarTimedCuesRobust(nextBody, url)
                             }
-                            if (nextParse.cues.size > lastCount) {
+                            if (nextParse.cues.size > sidecarTimedCues.size) {
                                 Log.d(
                                     PlayerRuntimeController.TAG,
-                                    "On-demand subtitle progressive update: $lastCount -> ${nextParse.cues.size} cues"
+                                    "JIT subtitle progressive update: ${sidecarTimedCues.size} -> ${nextParse.cues.size} cues"
                                 )
-                                lastCount = nextParse.cues.size
                                 sidecarTimedCues = nextParse.cues
                                 lastSidecarCueSignature = null
                                 renderSidecarCuesAtCurrentPosition()
                             }
-                        } catch (_: Exception) {}
+                        } catch (e: Exception) {
+                            Log.w(PlayerRuntimeController.TAG, "JIT progressive update error: ${e.message}")
+                        }
                     }
-                }
+                )
             }
 
             while (isActive && activeSidecarSubtitleKey == subtitleKey) {

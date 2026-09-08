@@ -1334,6 +1334,19 @@ internal fun PlayerRuntimeController.initializePlayer(
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
+                        if (isPrerollActive) {
+                            Log.w(PlayerRuntimeController.TAG, "Pre-roll playback error: ${error.message}. Skipping to main movie.")
+                            dev.khayin.app.core.analytics.PostHogAnalytics.trackAdFailed(
+                                adId = navigationArgs.prerollId,
+                                adTitle = _uiState.value.prerollTitle ?: navigationArgs.prerollTitle,
+                                adUrl = navigationArgs.prerollUrl,
+                                errorMessage = error.message ?: "Unknown playback error",
+                                mediaTitle = navigationArgs.title,
+                                videoId = navigationArgs.videoId
+                            )
+                            finishPrerollAndStartMainMovie()
+                            return
+                        }
                         if (isReleasingPlayer && error.errorCode == PlaybackException.ERROR_CODE_TIMEOUT) return
                         cancelFirstFrameWatchdog()
                         val detailedError = error.toDisplayMessage(context)

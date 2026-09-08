@@ -111,16 +111,16 @@ class PlayerSubtitleUtilsMimeTest {
         val esSub = dev.khayin.app.domain.model.Subtitle(id = "4", lang = "es", url = "https://a/es.srt", addonName = "OpenSubtitles", addonLogo = null)
 
         // Plus tier
-        assertTrue(PlayerSubtitleUtils.isAllowedAddonSubtitle(enSub, isPlus = true))
-        assertTrue(PlayerSubtitleUtils.isAllowedAddonSubtitle(zhSub, isPlus = true))
-        assertTrue(PlayerSubtitleUtils.isAllowedAddonSubtitle(mySub, isPlus = true))
-        org.junit.Assert.assertFalse(PlayerSubtitleUtils.isAllowedAddonSubtitle(esSub, isPlus = true))
+        assertTrue(PlayerSubtitleUtils.isAllowedAddonSubtitle(enSub, hasMyanmarAccess = true))
+        assertTrue(PlayerSubtitleUtils.isAllowedAddonSubtitle(zhSub, hasMyanmarAccess = true))
+        assertTrue(PlayerSubtitleUtils.isAllowedAddonSubtitle(mySub, hasMyanmarAccess = true))
+        org.junit.Assert.assertFalse(PlayerSubtitleUtils.isAllowedAddonSubtitle(esSub, hasMyanmarAccess = true))
 
         // Standard tier (no Burmese)
-        assertTrue(PlayerSubtitleUtils.isAllowedAddonSubtitle(enSub, isPlus = false))
-        assertTrue(PlayerSubtitleUtils.isAllowedAddonSubtitle(zhSub, isPlus = false))
-        org.junit.Assert.assertFalse(PlayerSubtitleUtils.isAllowedAddonSubtitle(mySub, isPlus = false))
-        org.junit.Assert.assertFalse(PlayerSubtitleUtils.isAllowedAddonSubtitle(esSub, isPlus = false))
+        assertTrue(PlayerSubtitleUtils.isAllowedAddonSubtitle(enSub, hasMyanmarAccess = false))
+        assertTrue(PlayerSubtitleUtils.isAllowedAddonSubtitle(zhSub, hasMyanmarAccess = false))
+        org.junit.Assert.assertFalse(PlayerSubtitleUtils.isAllowedAddonSubtitle(mySub, hasMyanmarAccess = false))
+        org.junit.Assert.assertFalse(PlayerSubtitleUtils.isAllowedAddonSubtitle(esSub, hasMyanmarAccess = false))
     }
 
     @Test

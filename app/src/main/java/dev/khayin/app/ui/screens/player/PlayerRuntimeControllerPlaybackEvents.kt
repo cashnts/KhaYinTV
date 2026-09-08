@@ -224,6 +224,11 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         bufferedPosition = (pos + (view.demuxerCacheDurationSec() * 1000.0).toLong())
                             .coerceAtLeast(displayPosition)
                     )
+                    subtitleJitManager.updatePlaybackProgress(
+                        currentTimeSec = pos / 1000.0,
+                        isPlaying = playingNow && !cacheBuffering,
+                        durationSec = playerDuration / 1000.0
+                    )
                     val nearEnd = playerDuration > 0L && pos >= (playerDuration - 500L)
                     val naturalEnded = nearEnd && shouldTreatAsNaturalPlaybackCompletion(
                         hasRenderedFirstFrame = firstFrameReady,
@@ -310,6 +315,11 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                 evaluatePostPlayOverlayVisibility(
                     positionMs = pos,
                     durationMs = playerDuration.coerceAtLeast(0L)
+                )
+                subtitleJitManager.updatePlaybackProgress(
+                    currentTimeSec = pos / 1000.0,
+                    isPlaying = player.isPlaying,
+                    durationSec = playerDuration / 1000.0
                 )
 
                 if (player.isPlaying) {
@@ -629,6 +639,18 @@ private fun PlayerRuntimeController.isShortPlaceholderStream(): Boolean {
  * watched or trigger auto-play next.
  */
 internal fun PlayerRuntimeController.handleNaturalPlaybackEnded() {
+    if (isPrerollActive) {
+        dev.khayin.app.core.analytics.PostHogAnalytics.trackAdCompleted(
+            adId = navigationArgs.prerollId,
+            adTitle = _uiState.value.prerollTitle ?: navigationArgs.prerollTitle,
+            adUrl = navigationArgs.prerollUrl,
+            durationSeconds = navigationArgs.prerollDuration ?: 0,
+            mediaTitle = navigationArgs.title,
+            videoId = navigationArgs.videoId
+        )
+        finishPrerollAndStartMainMovie()
+        return
+    }
     val position = currentPlaybackPositionMs() ?: 0L
     val duration = getEffectiveDuration(position)
     val hasFatalError = !_uiState.value.error.isNullOrBlank()
@@ -672,6 +694,7 @@ internal fun PlayerRuntimeController.cancelNextEpisodeAutoPlayOnFatalError() {
 }
 
 internal fun PlayerRuntimeController.saveWatchProgressInternal(position: Long, duration: Long, syncRemote: Boolean = true) {
+    if (isPrerollActive) return
     if (contentType.equals("cloud", ignoreCase = true)) {
         saveCloudLibraryProgress(position, duration, completed = false)
         return
@@ -792,8 +815,8 @@ internal fun PlayerRuntimeController.emitScrobbleStart() {
     // watching something already marked as watched. If the user seeks back
     // below 80%, the next progress update will re-trigger scrobble start.
     val currentProgress = currentPlaybackProgressPercent()
-    if (currentProgress >= 80f) {
-        logScrobbleDiagnostic("start_skipped", "reason=completion_threshold progress=$currentProgress")
+    if (isPrerollActive || currentProgress >= 80f) {
+        logScrobbleDiagnostic("start_skipped", "reason=preroll_or_completion progress=$currentProgress")
         return
     }
 
@@ -1192,6 +1215,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         }
         is PlayerEvent.OnSeekBy -> {
             pendingPreviewSeekPosition = null
+            if (_uiState.value.isPrerollActive) return
             val current = currentPlaybackPositionMs() ?: 0L
             val maxDuration = currentPlaybackDurationMs().takeIf { it >= 0 } ?: Long.MAX_VALUE
             val target = (current + event.deltaMs)
@@ -1212,6 +1236,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             }
         }
         is PlayerEvent.OnPreviewSeekBy -> {
+            if (_uiState.value.isPrerollActive) return
             val maxDuration = currentPlaybackDurationMs().takeIf { it >= 0 } ?: Long.MAX_VALUE
             val basePosition = pendingPreviewSeekPosition ?: currentPlaybackPositionMs()?.coerceAtLeast(0L) ?: 0L
             val target = (basePosition + event.deltaMs)
@@ -1226,6 +1251,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             }
         }
         PlayerEvent.OnCommitPreviewSeek -> {
+            if (_uiState.value.isPrerollActive) return
             val target = pendingPreviewSeekPosition
             if (target != null) {
                 seekPlaybackTo(target, SeekParameters.CLOSEST_SYNC)
@@ -1240,6 +1266,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             }
         }
         is PlayerEvent.OnSeekTo -> {
+            if (_uiState.value.isPrerollActive) return
             pendingPreviewSeekPosition = null
             seekPlaybackTo(event.position, SeekParameters.CLOSEST_SYNC)
             updatePlaybackTimeline(currentPosition = event.position)
@@ -1647,6 +1674,18 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         }
         PlayerEvent.OnDismissPauseOverlay -> {
             cancelPauseOverlay()
+        }
+        PlayerEvent.OnSkipPreroll -> {
+            dev.khayin.app.core.analytics.PostHogAnalytics.trackAdSkipped(
+                adId = navigationArgs.prerollId,
+                adTitle = _uiState.value.prerollTitle ?: navigationArgs.prerollTitle,
+                adUrl = navigationArgs.prerollUrl,
+                timeWatchedMs = currentPlaybackPositionMs() ?: 0L,
+                durationSeconds = navigationArgs.prerollDuration ?: 0,
+                mediaTitle = navigationArgs.title,
+                videoId = navigationArgs.videoId
+            )
+            finishPrerollAndStartMainMovie()
         }
         PlayerEvent.OnSkipIntro -> {
             skipActiveInterval()

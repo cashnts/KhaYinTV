@@ -2,6 +2,7 @@
 
 package dev.khayin.app.ui.screens.player
 
+import dev.khayin.app.features.license.MyanmarSubLimiter
 import dev.khayin.app.ui.theme.NuvioTheme
 
 import android.util.Log
@@ -105,6 +106,7 @@ internal fun SubtitleSelectionOverlay(
     subtitleDelayMs: Int,
     installedSubtitleAddonOrder: List<String>,
     isLoadingAddons: Boolean,
+    contentId: String? = null,
     onInternalTrackSelected: (Int) -> Unit,
     onAddonSubtitleSelected: (Subtitle) -> Unit,
     onDisableSubtitles: () -> Unit,
@@ -112,23 +114,26 @@ internal fun SubtitleSelectionOverlay(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val noneLabel = stringResource(R.string.subtitle_none)
     val unknownLabel = stringResource(R.string.subtitle_language_unknown)
     val builtInLabel = stringResource(R.string.subtitle_built_in)
     val forcedLabel = stringResource(R.string.sub_forced_lang)
-    val isPlus = remember(visible) { dev.khayin.app.features.license.LicenseRepository.isPlusMember }
+    val hasMyanmarAccess = remember(visible, contentId) {
+        MyanmarSubLimiter.canAccessMyanmarSub(context, contentId)
+    }
     val sessionPreferredLanguage = remember(visible) { subtitleStyle.preferredLanguage }
     val sessionSecondaryPreferredLanguage = remember(visible) { subtitleStyle.secondaryPreferredLanguage }
     val sessionShowOnlyPreferredLanguages = remember(visible) { subtitleStyle.showOnlyPreferredLanguages }
     val sessionSelectedInternalIndex = remember(visible) { selectedInternalIndex }
-    val sessionInternalTracks = remember(visible, isPlus) {
-        internalTracks.filter { PlayerSubtitleUtils.isAllowedSubtitleTrack(it, isPlus) }.map(TrackInfo::copy)
+    val sessionInternalTracks = remember(visible, hasMyanmarAccess) {
+        internalTracks.filter { PlayerSubtitleUtils.isAllowedSubtitleTrack(it, hasMyanmarAccess) }.map(TrackInfo::copy)
     }
-    val sessionAddonSubtitles = remember(visible, addonSubtitles, isPlus) {
-        addonSubtitles.filter { PlayerSubtitleUtils.isAllowedAddonSubtitle(it, isPlus) }.map(Subtitle::copy)
+    val sessionAddonSubtitles = remember(visible, addonSubtitles, hasMyanmarAccess) {
+        addonSubtitles.filter { PlayerSubtitleUtils.isAllowedAddonSubtitle(it, hasMyanmarAccess) }.map(Subtitle::copy)
     }
-    val sessionSelectedAddonSubtitle = remember(visible, isPlus) {
-        selectedAddonSubtitle?.takeIf { PlayerSubtitleUtils.isAllowedAddonSubtitle(it, isPlus) }?.copy()
+    val sessionSelectedAddonSubtitle = remember(visible, hasMyanmarAccess) {
+        selectedAddonSubtitle?.takeIf { PlayerSubtitleUtils.isAllowedAddonSubtitle(it, hasMyanmarAccess) }?.copy()
     }
     val sessionInstalledSubtitleAddonOrder = remember(visible) { installedSubtitleAddonOrder.toList() }
     val sessionIsLoadingAddons = isLoadingAddons
@@ -139,7 +144,7 @@ internal fun SubtitleSelectionOverlay(
             selectedAddonSubtitle = sessionSelectedAddonSubtitle
         )
     }
-    val languageItems = remember(visible, sessionAddonSubtitles, isPlus) {
+    val languageItems = remember(visible, sessionAddonSubtitles, hasMyanmarAccess) {
         buildSubtitleLanguageRailItems(
             internalTracks = sessionInternalTracks,
             addonSubtitles = sessionAddonSubtitles,
@@ -149,7 +154,7 @@ internal fun SubtitleSelectionOverlay(
             currentLanguageKey = sessionSelectedSubtitleLanguageKey,
             noneLabel = noneLabel,
             unknownLabel = unknownLabel,
-            isPlus = isPlus
+            hasMyanmarAccess = hasMyanmarAccess
         )
     }
     val sessionInitialLanguageKey = remember(visible, languageItems, sessionSelectedSubtitleLanguageKey) {
@@ -537,6 +542,12 @@ internal fun SubtitleSelectionOverlay(
                             styleEntryOptionId = optionId
                             activeOptionFocusId = optionId
                             activeRail = OverlayFocusRail.OPTION
+                            val track = sessionInternalTracks.firstOrNull { it.index == trackIndex }
+                            if (track != null && PlayerSubtitleUtils.isBurmeseTrack(track)) {
+                                if (contentId != null) {
+                                    MyanmarSubLimiter.recordMyanmarSubUsed(context, contentId)
+                                }
+                            }
                             onInternalTrackSelected(trackIndex)
                             revealStyleRail = true
                         },
@@ -546,6 +557,11 @@ internal fun SubtitleSelectionOverlay(
                             styleEntryOptionId = optionId
                             activeOptionFocusId = optionId
                             activeRail = OverlayFocusRail.OPTION
+                            if (PlayerSubtitleUtils.isBurmeseSubtitle(subtitle)) {
+                                if (contentId != null) {
+                                    MyanmarSubLimiter.recordMyanmarSubUsed(context, contentId)
+                                }
+                            }
                             onAddonSubtitleSelected(subtitle)
                             revealStyleRail = true
                         }
@@ -1695,17 +1711,17 @@ private fun buildSubtitleLanguageRailItems(
     currentLanguageKey: String,
     noneLabel: String,
     unknownLabel: String,
-    isPlus: Boolean
+    hasMyanmarAccess: Boolean
 ): List<SubtitleLanguageRailItem> {
     val counts = linkedMapOf<String, Int>()
     internalTracks
-        .filter { PlayerSubtitleUtils.isAllowedSubtitleTrack(it, isPlus) }
+        .filter { PlayerSubtitleUtils.isAllowedSubtitleTrack(it, hasMyanmarAccess) }
         .forEach { track ->
             val key = normalizeOverlayLanguageKeyForTrack(track)
             counts[key] = (counts[key] ?: 0) + 1
         }
     addonSubtitles
-        .filter { PlayerSubtitleUtils.isAllowedAddonSubtitle(it, isPlus) }
+        .filter { PlayerSubtitleUtils.isAllowedAddonSubtitle(it, hasMyanmarAccess) }
         .forEach { subtitle ->
             val key = normalizeOverlayLanguageKey(subtitle.lang)
             counts[key] = (counts[key] ?: 0) + 1

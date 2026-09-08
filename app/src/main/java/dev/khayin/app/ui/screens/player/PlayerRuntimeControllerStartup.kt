@@ -42,6 +42,82 @@ internal fun PlayerRuntimeController.startInitialPlaybackIfNeeded() {
         "startInitialPlayback: infoHash=$infoHash host=${currentStreamUrl.safeStartupHost()} " +
             "urlHash=${currentStreamUrl.hashCode().toUInt().toString(16)}"
     )
+    val shouldPlayPreroll = !dev.khayin.app.features.license.LicenseRepository.hasAdFreeAccess &&
+        !navigationArgs.prerollUrl.isNullOrBlank()
+
+    if (shouldPlayPreroll) {
+        startPrerollSequence()
+    } else {
+        startMainMoviePlayback()
+    }
+}
+
+internal fun PlayerRuntimeController.startPrerollSequence() {
+    val prerollUrl = navigationArgs.prerollUrl ?: run {
+        startMainMoviePlayback()
+        return
+    }
+
+    isPrerollActive = true
+    val prerollTitle = navigationArgs.prerollTitle?.takeIf { it.isNotBlank() } ?: "KhaYin TV"
+    val prerollNotice = ""
+    val skippableAfter = (navigationArgs.prerollSkippableAfter ?: 5).coerceAtLeast(0)
+
+    _uiState.update {
+        it.copy(
+            isPrerollActive = true,
+            prerollTitle = prerollTitle,
+            prerollNotice = prerollNotice,
+            canSkipPreroll = skippableAfter == 0,
+            prerollSkippableAfter = skippableAfter
+        )
+    }
+
+    prerollSkipJob?.cancel()
+    prerollSkipJob = scope.launch {
+        if (skippableAfter > 0) {
+            kotlinx.coroutines.delay(skippableAfter * 1000L)
+        }
+        _uiState.update { it.copy(canSkipPreroll = true) }
+    }
+
+    dev.khayin.app.core.analytics.PostHogAnalytics.trackAdStarted(
+        adId = navigationArgs.prerollId,
+        adTitle = prerollTitle,
+        adUrl = prerollUrl,
+        durationSeconds = navigationArgs.prerollDuration ?: 15,
+        skippableAfter = skippableAfter,
+        mediaTitle = navigationArgs.title,
+        videoId = navigationArgs.videoId
+    )
+
+    preparePlaybackBeforeStart(
+        url = prerollUrl,
+        headers = emptyMap(),
+        loadSavedProgress = false
+    )
+}
+
+internal fun PlayerRuntimeController.finishPrerollAndStartMainMovie() {
+    if (!isPrerollActive) return
+    isPrerollActive = false
+    prerollSkipJob?.cancel()
+    prerollSkipJob = null
+
+    _uiState.update {
+        it.copy(
+            isPrerollActive = false,
+            prerollTitle = null,
+            prerollNotice = null,
+            canSkipPreroll = false
+        )
+    }
+
+    startMainMoviePlayback()
+}
+
+internal fun PlayerRuntimeController.startMainMoviePlayback() {
+    val infoHash = navigationArgs.infoHash
     if (infoHash != null && !initialStreamUrl.startsWith("http")) {
         torrentStreamJob = scope.launch {
             try {
@@ -82,8 +158,8 @@ internal fun PlayerRuntimeController.startInitialPlaybackIfNeeded() {
     }
 
     preparePlaybackBeforeStart(
-        url = currentStreamUrl,
-        headers = currentHeaders,
+        url = mainMovieStreamUrl,
+        headers = mainMovieHeaders,
         loadSavedProgress = !navigationArgs.startFromBeginning
     )
 }

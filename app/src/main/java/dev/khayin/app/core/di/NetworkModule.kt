@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import dev.khayin.app.BuildConfig
 import dev.khayin.app.data.remote.api.AddonApi
+import dev.khayin.app.data.remote.api.AdsApi
 import dev.khayin.app.data.remote.api.AniSkipApi
 import dev.khayin.app.data.remote.api.AnimeSkipApi
 import dev.khayin.app.data.remote.api.ArmApi
@@ -308,6 +309,26 @@ object NetworkModule {
     @Singleton
     fun provideAddonApi(retrofit: Retrofit): AddonApi =
         retrofit.create(AddonApi::class.java)
+
+    @Provides
+    @Singleton
+    @Named("ads")
+    fun provideAdsRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://stream.khayin.net/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideAdsApi(@Named("ads") retrofit: Retrofit): AdsApi =
+        retrofit.create(AdsApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideSubtitleJitApi(@Named("ads") retrofit: Retrofit): dev.khayin.app.data.remote.api.SubtitleJitApi =
+        retrofit.create(dev.khayin.app.data.remote.api.SubtitleJitApi::class.java)
 
     @Provides
     @Singleton

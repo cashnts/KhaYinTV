@@ -96,6 +96,7 @@ class PlayerRuntimeController(
     internal val streamBadgePresentation: dev.khayin.app.core.streams.StreamBadgePresentation,
     internal val playbackIssueReportRepository: PlaybackIssueReportRepository,
     internal val tvRecommendationManager: dev.khayin.app.core.recommendations.TvRecommendationManager,
+    internal val subtitleJitManager: dev.khayin.app.features.subtitles.jit.SubtitleJitManager,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {
@@ -193,16 +194,22 @@ class PlayerRuntimeController(
     internal var currentVideoWidth: Int? = null
     internal var currentVideoHeight: Int? = null
     internal var currentVideoBitrate: Int? = null
+    internal val mainMovieStreamUrl: String
+    internal val mainMovieHeaders: Map<String, String>
     internal var currentStreamUrl: String
     internal var currentStreamResponseHeaders: Map<String, String> = emptyMap()
     internal var currentStreamMimeType: String?
     internal var currentHeaders: Map<String, String>
+    internal var isPrerollActive: Boolean = false
+    internal var prerollSkipJob: kotlinx.coroutines.Job? = null
 
     init {
         val initialPlaybackRequest = PlayerMediaSourceFactory.normalizePlaybackRequest(
             initialStreamUrl,
             PlayerMediaSourceFactory.parseHeaders(headersJson)
         )
+        mainMovieStreamUrl = initialPlaybackRequest.url
+        mainMovieHeaders = initialPlaybackRequest.headers
         currentStreamUrl = initialPlaybackRequest.url
         currentStreamMimeType = PlayerMediaSourceFactory.inferMimeType(
             url = initialPlaybackRequest.url,
@@ -216,6 +223,7 @@ class PlayerRuntimeController(
     fun getCurrentHeaders(): Map<String, String> = currentHeaders
 
     fun stopAndRelease() {
+        subtitleJitManager.stopSession()
         releasePlayer()
     }
 
@@ -227,6 +235,7 @@ class PlayerRuntimeController(
     internal val _uiState = MutableStateFlow(
         PlayerUiState(
             title = title,
+            contentId = contentId,
             contentName = contentName,
             currentStreamName = streamName,
             currentStreamUrl = currentStreamUrl,
