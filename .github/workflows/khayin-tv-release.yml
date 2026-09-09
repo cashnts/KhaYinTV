@@ -233,7 +233,7 @@ jobs:
 
       # Upload to Cloudflare R2 using AWS CLI with custom S3 endpoint
       - name: Upload to Cloudflare R2 Bucket
-        if: inputs.upload_to_r2 != false
+        if: github.event_name == 'push' || inputs.upload_to_r2 != false
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -280,7 +280,7 @@ jobs:
           aws s3 ls "s3://${R2_BUCKET_NAME}/${TARGET_DIR}/" --endpoint-url "${ENDPOINT_URL}" --region auto || true
 
       - name: Create or Update GitHub Release
-        if: (needs.metadata.outputs.is_release == 'true') && (inputs.create_github_release != false)
+        if: (needs.metadata.outputs.is_release == 'true') && (github.event_name == 'push' || inputs.create_github_release != false)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.metadata.outputs.clean_version }}
