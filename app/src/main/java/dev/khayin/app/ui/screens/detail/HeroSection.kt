@@ -237,7 +237,7 @@ fun HeroContentSection(
                 genres = meta.genres,
                 description = meta.description,
             )
-            val isSportsLocked = isSportsItem && !dev.khayin.app.features.license.LicenseRepository.isPlusMember
+            val isSportsLocked = isSportsItem && !dev.khayin.app.features.license.LicenseRepository.canAccessSports
             var showSportsLockedDialog by remember { mutableStateOf(false) }
 
             if (showSportsLockedDialog) {

@@ -30,3 +30,19 @@ data class SubtitleTranslationStatusDto(
     @Json(name = "progressPercent") val progressPercent: Int? = null,
     @Json(name = "isComplete") val isComplete: Boolean = false
 )
+
+@JsonClass(generateAdapter = true)
+data class SubtitleSeekRequestDto(
+    @Json(name = "id") val id: String,
+    @Json(name = "currentTime") val currentTime: Double
+)
+
+@JsonClass(generateAdapter = true)
+data class SubtitleSeekResponseDto(
+    @Json(name = "success") val success: Boolean = false,
+    @Json(name = "mediaId") val mediaId: String? = null,
+    @Json(name = "targetSection") val targetSection: Int? = null,
+    @Json(name = "isReady") val isReady: Boolean = false,
+    @Json(name = "inFlight") val inFlight: Boolean = false
+)
+

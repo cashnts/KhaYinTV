@@ -262,7 +262,7 @@ private fun ModernCatalogRowItem(
         genres = metaPreview?.genres.orEmpty(),
         description = metaPreview?.description,
     )
-    val itemLocked = isRowLocked || (!dev.khayin.app.features.license.LicenseRepository.isPlusMember && isSportsItem)
+    val itemLocked = isRowLocked || (!dev.khayin.app.features.license.LicenseRepository.canAccessSports && isSportsItem)
     var showSportsLockedDialog by remember { mutableStateOf(false) }
 
     if (showSportsLockedDialog) {
@@ -522,7 +522,7 @@ internal fun ModernRowSection(
             name = row.title,
             catalogId = row.key,
         )
-        val isRowLocked = isSportsCatalog && !dev.khayin.app.features.license.LicenseRepository.isPlusMember
+        val isRowLocked = isSportsCatalog && !dev.khayin.app.features.license.LicenseRepository.canAccessSports
 
         val titleMediumStyle = MaterialTheme.typography.titleMedium
         val rowTitleStyle = remember(titleMediumStyle) {

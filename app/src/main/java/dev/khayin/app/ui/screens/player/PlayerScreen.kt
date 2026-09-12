@@ -1475,7 +1475,7 @@ fun PlayerScreen(
                 durationMs = playbackTimeline.duration
             )
         }
-        val isSportsLocked = isLive && !dev.khayin.app.features.license.LicenseRepository.isPlusMember
+        val isSportsLocked = isLive && !dev.khayin.app.features.license.LicenseRepository.canAccessSports
 
         LaunchedEffect(isSportsLocked, uiState.isPlaying) {
             if (isSportsLocked && uiState.isPlaying) {

@@ -144,7 +144,7 @@ fun StreamScreen(
             genres = uiState.genres?.split(",") ?: emptyList()
         )
     }
-    val isSportsLocked = isSportsItem && !dev.khayin.app.features.license.LicenseRepository.isPlusMember
+    val isSportsLocked = isSportsItem && !dev.khayin.app.features.license.LicenseRepository.canAccessSports
 
     LaunchedEffect(restoreSourceSelection) {
         if (restoreSourceSelection) {

@@ -27,6 +27,7 @@ class SubtitleJitManager @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var heartbeatJob: Job? = null
     private var pollingJob: Job? = null
+    private var seekJob: Job? = null
 
     @Volatile
     private var activeSessionId: String? = null
@@ -36,6 +37,10 @@ class SubtitleJitManager @Inject constructor(
     private var activeType: String = "movie"
     @Volatile
     private var activeSubtitleUrl: String? = null
+    @Volatile
+    private var currentOnNewCuesAvailable: (suspend (url: String) -> Unit)? = null
+    @Volatile
+    private var lastLoadedCompletedSections: Int = -1
 
     @Volatile
     private var lastCurrentTimeSec: Double = 0.0
@@ -88,6 +93,7 @@ class SubtitleJitManager @Inject constructor(
         val sessionKey = "$cleanType:$effectiveId:$subtitleUrl"
 
         if (activeSessionId == sessionKey) {
+            currentOnNewCuesAvailable = onNewCuesAvailable
             return
         }
 
@@ -97,6 +103,8 @@ class SubtitleJitManager @Inject constructor(
         activeMediaId = effectiveId
         activeType = cleanType
         activeSubtitleUrl = subtitleUrl
+        currentOnNewCuesAvailable = onNewCuesAvailable
+        lastLoadedCompletedSections = -1
 
         Log.d(TAG, "Starting JIT session for $cleanType $effectiveId ($subtitleUrl)")
 
@@ -119,38 +127,42 @@ class SubtitleJitManager @Inject constructor(
             }
         }
 
-        // 3. Status check & progressive refetch loop – starts immediately (no initial delay)
-        pollingJob = scope.launch {
-            var lastCompletedSections = -1
-            var isFinished = false
+        // 3. Status check & progressive refetch loop
+        ensurePollingActive(effectiveId, sessionKey)
+    }
 
-            while (isActive && activeSessionId == sessionKey && !isFinished) {
+    private fun ensurePollingActive(effectiveId: String, sessionKey: String) {
+        if (pollingJob?.isActive == true) return
+
+        pollingJob = scope.launch {
+            while (isActive && activeSessionId == sessionKey) {
                 try {
                     val res = jitApi.getTranslationStatus(effectiveId)
                     if (res.isSuccessful && res.body() != null) {
                         val body = res.body()!!
                         val completed = body.completedSections ?: 0
+                        val total = body.totalSections ?: 1
                         Log.d(
                             TAG,
                             "JIT status for $effectiveId: complete=${body.isComplete} inFlight=${body.inFlight} " +
-                                "sections=$completed/${body.totalSections} progress=${body.progressPercent}%"
+                                "sections=$completed/$total progress=${body.progressPercent}%"
                         )
 
-                        if (body.isComplete) {
-                            isFinished = true
-                            onNewCuesAvailable?.invoke(subtitleUrl)
-                            Log.d(TAG, "JIT translation complete for $effectiveId")
+                        if (completed > lastLoadedCompletedSections || lastLoadedCompletedSections == -1) {
+                            lastLoadedCompletedSections = completed
+                            Log.i(TAG, "New translated section available ($completed/$total) for $effectiveId, triggering reload")
+                            activeSubtitleUrl?.let { url -> currentOnNewCuesAvailable?.invoke(url) }
+                        }
+
+                        // Stop polling only when all sections are fully completed and no longer in-flight
+                        if (body.isComplete && completed >= total && body.inFlight != true) {
+                            Log.i(TAG, "JIT translation fully complete ($completed/$total) for $effectiveId")
                             break
-                        } else if (completed > lastCompletedSections || lastCompletedSections == -1) {
-                            lastCompletedSections = completed
-                            // Trigger reload whenever new sections arrive
-                            onNewCuesAvailable?.invoke(subtitleUrl)
                         }
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "JIT status check error: ${e.message}")
                 }
-                // Fast poll while in-flight; loop exits via break when complete
                 delay(STATUS_POLL_INTERVAL_IN_FLIGHT_MS)
             }
         }
@@ -159,15 +171,31 @@ class SubtitleJitManager @Inject constructor(
     fun updatePlaybackProgress(
         currentTimeSec: Double,
         isPlaying: Boolean,
-        durationSec: Double
+        durationSec: Double,
+        isLoading: Boolean = false
     ) {
+        val prevTime = lastCurrentTimeSec
         lastCurrentTimeSec = currentTimeSec
         lastDurationSec = durationSec
+
+        // If media is still loading or buffering, do not misinterpret as user pausing
+        if (isLoading) {
+            return
+        }
+
+        // Seek detection: if currentTime jumped by more than 8 seconds
+        val timeJump = kotlin.math.abs(currentTimeSec - prevTime)
+        val isSeek = prevTime > 0.0 && timeJump > 8.0
+
+        if (isSeek && activeMediaId != null) {
+            Log.i(TAG, "Playback seek detected: ${prevTime.toLong()}s -> ${currentTimeSec.toLong()}s (jump=${timeJump.toLong()}s). Prioritizing JIT translation.")
+            handlePlaybackSeek(currentTimeSec, isPlaying)
+        }
 
         if (lastIsPlaying != isPlaying) {
             lastIsPlaying = isPlaying
             if (!isPlaying && wasPlayingSent) {
-                // User paused: send a single heartbeat with isPlaying = false immediately
+                // User intentionally paused: send a single heartbeat with isPlaying = false immediately
                 scope.launch {
                     sendHeartbeat(isPlaying = false)
                 }
@@ -176,14 +204,48 @@ class SubtitleJitManager @Inject constructor(
         }
     }
 
-    private suspend fun sendHeartbeat(isPlaying: Boolean) {
+    private fun handlePlaybackSeek(seekTimeSec: Double, isPlaying: Boolean) {
+        val mediaId = activeMediaId ?: return
+        val sessionKey = activeSessionId ?: return
+
+        seekJob?.cancel()
+        seekJob = scope.launch {
+            // 1. Immediately send heartbeat with the seek position so backend session updates right away
+            sendHeartbeat(isPlaying = isPlaying, currentTime = seekTimeSec)
+
+            // 2. Call /api/translation/seek to prioritize the target section on the backend
+            try {
+                val seekReq = dev.khayin.app.data.remote.dto.SubtitleSeekRequestDto(
+                    id = mediaId,
+                    currentTime = seekTimeSec
+                )
+                val res = jitApi.seekTranslation(seekReq)
+                if (res.isSuccessful && res.body() != null) {
+                    val seekRes = res.body()!!
+                    Log.i(TAG, "Seek API result for $mediaId at ${seekTimeSec.toLong()}s: section=${seekRes.targetSection}, isReady=${seekRes.isReady}")
+
+                    if (seekRes.isReady) {
+                        Log.i(TAG, "Target section for seek is already ready! Reloading subtitle immediately.")
+                        activeSubtitleUrl?.let { url -> currentOnNewCuesAvailable?.invoke(url) }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to notify seek API: ${e.message}")
+            }
+
+            // 3. Ensure status polling is active to catch new section cues as soon as translation finishes
+            ensurePollingActive(mediaId, sessionKey)
+        }
+    }
+
+    private suspend fun sendHeartbeat(isPlaying: Boolean, currentTime: Double = lastCurrentTimeSec) {
         val mediaId = activeMediaId ?: return
         try {
             val req = SubtitleHeartbeatRequestDto(
                 slug = "anonymous",
                 type = activeType,
                 id = mediaId,
-                currentTime = lastCurrentTimeSec,
+                currentTime = currentTime,
                 isPlaying = isPlaying,
                 duration = if (lastDurationSec > 0.0) lastDurationSec else null
             )
@@ -203,6 +265,8 @@ class SubtitleJitManager @Inject constructor(
         val prevCurrentTime = lastCurrentTimeSec
         val prevDuration = lastDurationSec
 
+        seekJob?.cancel()
+        seekJob = null
         heartbeatJob?.cancel()
         heartbeatJob = null
         pollingJob?.cancel()
@@ -211,6 +275,7 @@ class SubtitleJitManager @Inject constructor(
         activeSessionId = null
         activeMediaId = null
         activeSubtitleUrl = null
+        currentOnNewCuesAvailable = null
         wasPlayingSent = false
 
         if (hadActiveHeartbeat && prevMediaId != null) {

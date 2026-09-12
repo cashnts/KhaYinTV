@@ -683,6 +683,20 @@ object PostHogAnalytics {
         )
     }
 
+    fun isSportsFreeForAll(): Boolean {
+        return try {
+            val flags = listOf("sports-free-for-all", "free-sports", "sports_free_for_all", "enable-free-sports")
+            for (flag in flags) {
+                if (PostHog.isFeatureEnabled(flag, defaultValue = false)) {
+                    return true
+                }
+            }
+            false
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun reset() {
         try {
             PostHog.reset()

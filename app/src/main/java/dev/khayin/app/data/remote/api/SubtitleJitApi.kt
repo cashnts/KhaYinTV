@@ -24,4 +24,11 @@ interface SubtitleJitApi {
         @Path("id") id: String,
         @Header("User-Agent") userAgent: String = "KhaYin/TV"
     ): Response<SubtitleTranslationStatusDto>
+
+    @Headers("Content-Type: application/json")
+    @POST("api/translation/seek")
+    suspend fun seekTranslation(
+        @Body request: dev.khayin.app.data.remote.dto.SubtitleSeekRequestDto,
+        @Header("User-Agent") userAgent: String = "KhaYin/TV"
+    ): Response<dev.khayin.app.data.remote.dto.SubtitleSeekResponseDto>
 }

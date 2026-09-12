@@ -46,6 +46,12 @@ object LicenseRepository {
             return current?.isPlus == true
         }
 
+    val canAccessSports: Boolean
+        get() {
+            if (dev.khayin.app.core.analytics.PostHogAnalytics.isSportsFreeForAll()) return true
+            return isPlusMember
+        }
+
     val isLicensed: Boolean
         get() = _state.value is LicenseState.Active
 

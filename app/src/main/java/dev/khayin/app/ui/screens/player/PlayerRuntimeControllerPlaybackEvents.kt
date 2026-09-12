@@ -226,8 +226,9 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                     )
                     subtitleJitManager.updatePlaybackProgress(
                         currentTimeSec = pos / 1000.0,
-                        isPlaying = playingNow && !cacheBuffering,
-                        durationSec = playerDuration / 1000.0
+                        isPlaying = playingNow,
+                        durationSec = playerDuration / 1000.0,
+                        isLoading = cacheBuffering || !firstFrameReady
                     )
                     val nearEnd = playerDuration > 0L && pos >= (playerDuration - 500L)
                     val naturalEnded = nearEnd && shouldTreatAsNaturalPlaybackCompletion(
@@ -319,7 +320,8 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                 subtitleJitManager.updatePlaybackProgress(
                     currentTimeSec = pos / 1000.0,
                     isPlaying = player.isPlaying,
-                    durationSec = playerDuration / 1000.0
+                    durationSec = playerDuration / 1000.0,
+                    isLoading = player.isLoading
                 )
 
                 if (player.isPlaying) {
