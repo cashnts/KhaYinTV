@@ -67,6 +67,7 @@ data class PlayerUiState(
     val contentName: String? = null, // Series/show name (for series content)
     val releaseYear: String? = null, // Release year for movies
     val contentType: String? = null,
+    val isLive: Boolean = false,
     val currentStreamName: String? = null, // Name of the current stream source
     val currentStreamUrl: String? = null,
     val isPrerollActive: Boolean = false,

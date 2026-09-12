@@ -120,6 +120,110 @@ object ThemeColors {
         backgroundCard = NuvioPrimitives.neutral850
     )
 
+    val Cyberpunk = ThemeColorPalette(
+        secondary = Color(0xFF00F0FF),
+        secondaryVariant = Color(0xFF7000FF),
+        onSecondary = Color(0xFF05101A),
+        onSecondaryVariant = Color.White,
+        accentGradient = listOf(Color(0xFF00F0FF), Color(0xFF7000FF), Color(0xFFFF007F)),
+        focusRing = Color(0xFF00F0FF),
+        focusBackground = Color(0xFF0A1C2A),
+        background = Color(0xFF080811),
+        backgroundElevated = Color(0xFF111122),
+        backgroundCard = Color(0xFF16162C)
+    )
+
+    val Sunset = ThemeColorPalette(
+        secondary = Color(0xFFFF6D00),
+        secondaryVariant = Color(0xFFFF3D00),
+        onSecondary = Color(0xFF1C0B02),
+        onSecondaryVariant = Color.White,
+        accentGradient = listOf(Color(0xFFFF9E80), Color(0xFFFF6D00), Color(0xFFFF3D00)),
+        focusRing = Color(0xFFFF9E80),
+        focusBackground = Color(0xFF3A1A0D),
+        background = Color(0xFF100B09),
+        backgroundElevated = Color(0xFF1A120E),
+        backgroundCard = Color(0xFF241813)
+    )
+
+    val MidnightPurple = ThemeColorPalette(
+        secondary = Color(0xFFA855F7),
+        secondaryVariant = Color(0xFF7E22CE),
+        onSecondary = Color(0xFF12051E),
+        onSecondaryVariant = Color.White,
+        accentGradient = listOf(Color(0xFFC084FC), Color(0xFFA855F7), Color(0xFF7E22CE)),
+        focusRing = Color(0xFFC084FC),
+        focusBackground = Color(0xFF2A123D),
+        background = Color(0xFF0C0812),
+        backgroundElevated = Color(0xFF150F20),
+        backgroundCard = Color(0xFF1E152D)
+    )
+
+    val Ruby = ThemeColorPalette(
+        secondary = Color(0xFFFF1744),
+        secondaryVariant = Color(0xFFD50000),
+        onSecondary = Color.White,
+        onSecondaryVariant = Color.White,
+        accentGradient = listOf(Color(0xFFFF5252), Color(0xFFFF1744), Color(0xFFD50000)),
+        focusRing = Color(0xFFFF5252),
+        focusBackground = Color(0xFF3D0A14),
+        background = Color(0xFF10080A),
+        backgroundElevated = Color(0xFF1C0F12),
+        backgroundCard = Color(0xFF271419)
+    )
+
+    val Aquamarine = ThemeColorPalette(
+        secondary = Color(0xFF00E5FF),
+        secondaryVariant = Color(0xFF00BFA5),
+        onSecondary = Color(0xFF03181C),
+        onSecondaryVariant = Color(0xFF03181C),
+        accentGradient = listOf(Color(0xFF18FFFF), Color(0xFF00E5FF), Color(0xFF00BFA5)),
+        focusRing = Color(0xFF18FFFF),
+        focusBackground = Color(0xFF0A282C),
+        background = Color(0xFF070F11),
+        backgroundElevated = Color(0xFF0E1B1E),
+        backgroundCard = Color(0xFF13262A)
+    )
+
+    val Mint = ThemeColorPalette(
+        secondary = Color(0xFF00F5A0),
+        secondaryVariant = Color(0xFF00C896),
+        onSecondary = Color(0xFF041C13),
+        onSecondaryVariant = Color(0xFF041C13),
+        accentGradient = listOf(Color(0xFF69F0AE), Color(0xFF00F5A0), Color(0xFF00C896)),
+        focusRing = Color(0xFF69F0AE),
+        focusBackground = Color(0xFF0A2E20),
+        background = Color(0xFF07100B),
+        backgroundElevated = Color(0xFF0E1C14),
+        backgroundCard = Color(0xFF13271C)
+    )
+
+    val Coral = ThemeColorPalette(
+        secondary = Color(0xFFFF6B6B),
+        secondaryVariant = Color(0xFFEE5253),
+        onSecondary = Color(0xFF1E0606),
+        onSecondaryVariant = Color.White,
+        accentGradient = listOf(Color(0xFFFF8E8E), Color(0xFFFF6B6B), Color(0xFFEE5253)),
+        focusRing = Color(0xFFFF8E8E),
+        focusBackground = Color(0xFF3A1717),
+        background = Color(0xFF100909),
+        backgroundElevated = Color(0xFF1B1010),
+        backgroundCard = Color(0xFF261616)
+    )
+
+    val Titanium = ThemeColorPalette(
+        secondary = Color(0xFF90A4AE),
+        secondaryVariant = Color(0xFF607D8B),
+        onSecondary = Color(0xFF0A0F12),
+        onSecondaryVariant = Color.White,
+        accentGradient = listOf(Color(0xFFCFD8DC), Color(0xFF90A4AE), Color(0xFF607D8B)),
+        focusRing = Color(0xFFCFD8DC),
+        focusBackground = Color(0xFF20292E),
+        background = Color(0xFF0A0D0F),
+        backgroundElevated = Color(0xFF12171A),
+        backgroundCard = Color(0xFF1A2126)
+    )
+
     fun getColorPalette(theme: AppTheme): ThemeColorPalette {
         return when (theme) {
             AppTheme.KHAYIN -> KhaYin
@@ -136,6 +240,14 @@ object ThemeColors {
             AppTheme.AMBER -> Amber
             AppTheme.ROSE -> Rose
             AppTheme.WHITE -> White
+            AppTheme.CYBERPUNK -> Cyberpunk
+            AppTheme.SUNSET -> Sunset
+            AppTheme.MIDNIGHT_PURPLE -> MidnightPurple
+            AppTheme.RUBY -> Ruby
+            AppTheme.AQUAMARINE -> Aquamarine
+            AppTheme.MINT -> Mint
+            AppTheme.CORAL -> Coral
+            AppTheme.TITANIUM -> Titanium
         }
     }
 }

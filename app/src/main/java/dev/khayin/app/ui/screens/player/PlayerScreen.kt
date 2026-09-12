@@ -26,6 +26,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,6 +59,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Speed
@@ -1461,6 +1463,31 @@ fun PlayerScreen(
                 onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissTransientOverlay) }
             )
         }
+
+        val playbackTimeline by viewModel.playbackTimeline.collectAsState()
+        val isLive = remember(uiState, playbackTimeline.duration) {
+            uiState.isLive || dev.khayin.app.core.util.LiveMediaCleaner.isLive(
+                type = uiState.contentType,
+                title = uiState.title,
+                streamTitle = uiState.currentStreamName,
+                description = uiState.description,
+                sourceUrl = uiState.currentStreamUrl,
+                durationMs = playbackTimeline.duration
+            )
+        }
+        val isSportsLocked = isLive && !dev.khayin.app.features.license.LicenseRepository.isPlusMember
+
+        LaunchedEffect(isSportsLocked, uiState.isPlaying) {
+            if (isSportsLocked && uiState.isPlaying) {
+                viewModel.onEvent(PlayerEvent.OnPlayPause)
+            }
+        }
+
+        if (isSportsLocked) {
+            dev.khayin.app.features.license.ui.SportsPlusLockedDialog(
+                onDismiss = exitPlayerFromError
+            )
+        }
     }
 }
 
@@ -1859,6 +1886,15 @@ private fun PlayerControlsOverlay(
                 .padding(horizontal = NuvioTheme.spacing.xxl, vertical = NuvioTheme.spacing.xl)
         ) {
             val skipIntroVisible = uiState.activeSkipInterval != null
+            val isLive = remember(uiState) {
+                uiState.isLive || dev.khayin.app.core.util.LiveMediaCleaner.isLive(
+                    type = uiState.contentType,
+                    title = uiState.title,
+                    streamTitle = uiState.currentStreamName,
+                    description = uiState.description,
+                    sourceUrl = uiState.currentStreamUrl
+                )
+            }
 
             AnimatedVisibility(
                 visible = !skipIntroVisible,
@@ -1866,11 +1902,12 @@ private fun PlayerControlsOverlay(
                 exit = fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.fast))
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    val displayName = if (uiState.currentSeason != null && uiState.currentEpisode != null) {
+                    val rawName = if (uiState.currentSeason != null && uiState.currentEpisode != null) {
                         uiState.contentName ?: uiState.title
                     } else {
                         uiState.title
                     }
+                    val displayName = remember(rawName) { dev.khayin.app.core.util.LiveMediaCleaner.cleanTitle(rawName) }
 
                     Text(
                         text = displayName,
@@ -1923,8 +1960,11 @@ private fun PlayerControlsOverlay(
                                 enter = fadeIn(animationSpec = tween(durationMillis = 220)),
                                 exit = fadeOut(animationSpec = tween(durationMillis = NuvioMotion.tokens.durations.fast))
                             ) {
+                                val cleanStream = remember(uiState.currentStreamName) {
+                                    dev.khayin.app.core.util.LiveMediaCleaner.cleanStreamLabel(uiState.currentStreamName ?: "")
+                                }
                                 Text(
-                                    text = stringResource(R.string.player_via, (uiState.currentStreamName ?: "").replace("\n", " · ")),
+                                    text = stringResource(R.string.player_via, cleanStream.replace("\n", " · ")),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color.White.copy(alpha = 0.68f),
                                     maxLines = 2,
@@ -1942,6 +1982,7 @@ private fun PlayerControlsOverlay(
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 PlayerControlsProgressBarHost(
                     viewModel = viewModel,
+                    isLive = isLive,
                     focusRequester = progressBarFocusRequester,
                     upFocusRequester = progressBarUpFocusRequester,
                     downFocusRequester = playPauseFocusRequester,
@@ -2017,25 +2058,6 @@ private fun PlayerControlsOverlay(
                         )
                     }
 
-                    ControlButton(
-                        icon = Icons.Default.SwapHoriz,
-                        iconPainter = customSourcePainter,
-                        contentDescription = stringResource(R.string.cd_sources),
-                        onClick = onShowSourcesPanel,
-                        upFocusRequester = progressBarFocusRequester,
-                        onDownKey = onHideControls,
-                        onFocused = onResetHideTimer
-                    )
-
-                    ControlButton(
-                        icon = Icons.Default.SwapHoriz,
-                        contentDescription = stringResource(R.string.cd_switch_player_engine),
-                        onClick = onSwitchPlayerEngine,
-                        upFocusRequester = progressBarFocusRequester,
-                        onDownKey = onHideControls,
-                        onFocused = onResetHideTimer
-                    )
-
                     if (hasEpisodeContext) {
                         ControlButton(
                             icon = Icons.AutoMirrored.Filled.List,
@@ -2047,6 +2069,16 @@ private fun PlayerControlsOverlay(
                             onFocused = onResetHideTimer
                         )
                     }
+
+                    ControlButton(
+                        icon = Icons.Default.SwapHoriz,
+                        iconPainter = customSourcePainter,
+                        contentDescription = stringResource(R.string.cd_sources),
+                        onClick = onShowSourcesPanel,
+                        upFocusRequester = progressBarFocusRequester,
+                        onDownKey = onHideControls,
+                        onFocused = onResetHideTimer
+                    )
 
                     AnimatedVisibility(
                         visible = uiState.showMoreDialog,
@@ -2063,16 +2095,18 @@ private fun PlayerControlsOverlay(
                             horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            ControlButton(
-                                icon = Icons.Default.Speed,
-                                contentDescription = stringResource(R.string.cd_playback_speed),
-                                onClick = {
-                                    onShowSpeedDialog()
-                                },
-                                upFocusRequester = progressBarFocusRequester,
-                                onDownKey = onHideControls,
-                                onFocused = onResetHideTimer
-                            )
+                            if (!isLive) {
+                                ControlButton(
+                                    icon = Icons.Default.Speed,
+                                    contentDescription = stringResource(R.string.cd_playback_speed),
+                                    onClick = {
+                                        onShowSpeedDialog()
+                                    },
+                                    upFocusRequester = progressBarFocusRequester,
+                                    onDownKey = onHideControls,
+                                    onFocused = onResetHideTimer
+                                )
+                            }
                             ControlButton(
                                 icon = Icons.Default.AspectRatio,
                                 iconPainter = customAspectPainter,
@@ -2135,7 +2169,10 @@ private fun PlayerControlsOverlay(
                 }
 
                 // Right side - Time display only
-                PlayerControlsTimeTextHost(viewModel = viewModel)
+                PlayerControlsTimeTextHost(
+                    viewModel = viewModel,
+                    isLive = isLive
+                )
             }
             }
         }
@@ -2145,6 +2182,7 @@ private fun PlayerControlsOverlay(
 @Composable
 private fun PlayerControlsProgressBarHost(
     viewModel: PlayerViewModel,
+    isLive: Boolean = false,
     focusRequester: FocusRequester,
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
@@ -2153,33 +2191,100 @@ private fun PlayerControlsProgressBarHost(
 ) {
     val playbackTimeline by viewModel.playbackTimeline.collectAsState()
 
-    ProgressBar(
-        currentPosition = playbackTimeline.currentPosition,
-        duration = playbackTimeline.duration,
-        onSeekPreview = { delta ->
-            viewModel.onEvent(PlayerEvent.OnPreviewSeekBy(delta))
-        },
-        onSeekCommit = {
-            viewModel.onEvent(PlayerEvent.OnCommitPreviewSeek)
-        },
-        focusRequester = focusRequester,
-        upFocusRequester = upFocusRequester,
-        downFocusRequester = downFocusRequester,
-        onUpKey = onUpKey,
-        onFocused = onFocused,
-        bufferedPosition = playbackTimeline.bufferedPosition
-    )
+    if (isLive) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color(0xFFFF2A2A))
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
+                    )
+                    Text(
+                        text = "LIVE",
+                        color = Color.White,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(
+                        androidx.compose.ui.graphics.Brush.horizontalGradient(
+                            listOf(Color(0xFFFF2A2A), Color(0xFFFF5A5A), Color(0xFFFF2A2A))
+                        )
+                    )
+            )
+        }
+    } else {
+        ProgressBar(
+            currentPosition = playbackTimeline.currentPosition,
+            duration = playbackTimeline.duration,
+            onSeekPreview = { delta ->
+                viewModel.onEvent(PlayerEvent.OnPreviewSeekBy(delta))
+            },
+            onSeekCommit = {
+                viewModel.onEvent(PlayerEvent.OnCommitPreviewSeek)
+            },
+            focusRequester = focusRequester,
+            upFocusRequester = upFocusRequester,
+            downFocusRequester = downFocusRequester,
+            onUpKey = onUpKey,
+            onFocused = onFocused,
+            bufferedPosition = playbackTimeline.bufferedPosition
+        )
+    }
 }
 
 @Composable
-private fun PlayerControlsTimeTextHost(viewModel: PlayerViewModel) {
+private fun PlayerControlsTimeTextHost(
+    viewModel: PlayerViewModel,
+    isLive: Boolean = false
+) {
     val playbackTimeline by viewModel.playbackTimeline.collectAsState()
 
-    Text(
-        text = "${formatTime(playbackTimeline.currentPosition)} / ${formatTime(playbackTimeline.duration)}",
-        style = MaterialTheme.typography.bodyMedium,
-        color = Color.White.copy(alpha = 0.9f)
-    )
+    if (isLive) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color(0xFFFF2A2A).copy(alpha = 0.2f))
+                .border(1.dp, Color(0xFFFF2A2A).copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = "LIVE",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color(0xFFFF4D4D),
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+            )
+        }
+    } else {
+        Text(
+            text = "${formatTime(playbackTimeline.currentPosition)} / ${formatTime(playbackTimeline.duration)}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.White.copy(alpha = 0.9f)
+        )
+    }
 }
 
 @Composable

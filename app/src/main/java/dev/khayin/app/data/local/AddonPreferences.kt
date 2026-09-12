@@ -240,7 +240,9 @@ class AddonPreferences @Inject constructor(
 
     private fun getDefaultAddons(): Set<String> = setOf(
         "https://stream.khayin.net",
+        "https://catalog.nuvio.tv",
         "https://v3-cinemeta.strem.io",
-        "https://opensubtitles-v3.strem.io"
+        "https://opensubtitles-v3.strem.io",
+        "https://premium.highfly.dev/fd47b1a7-5d08-4e24-ae97-9e9fe91d6321/eyJpbmNsdWRlU3BvcnRzIjpbImZvb3RiYWxsIiwiYmFza2V0YmFsbCIsIm1vdG9yLXNwb3J0cyJdLCJoaWRlVGl0bGVzIjp0cnVlLCJoaWRlRGVzY3JpcHRpb25zIjp0cnVlLCJ0aW1lem9uZSI6Ik1NVCIsInNvcnRTdHJlYW1zIjoicXVhbGl0eS1oaWdoIiwibmFtZVRwbCI6IntzdHJlYW0uY2hhbm5lbE5hbWV9IHwge3N0cmVhbS5jYXRlZ29yeX0ifQ/manifest.json"
     )
 }

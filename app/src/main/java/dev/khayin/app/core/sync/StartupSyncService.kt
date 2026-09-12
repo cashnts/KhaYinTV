@@ -201,6 +201,12 @@ class StartupSyncService @Inject constructor(
             } finally {
                 addonRepository.isSyncingFromRemote = false
             }
+            // Always ensure locked built-in addons survive the manual sync.
+            try {
+                addonRepository.injectDefaultAddons()
+            } catch (e: Exception) {
+                Log.e(TAG, "Manual addon sync: failed to inject default addons", e)
+            }
         }
     }
 
@@ -623,6 +629,12 @@ class StartupSyncService @Inject constructor(
                 } finally {
                     addonRepository.isSyncingFromRemote = false
                 }
+                // Always ensure locked built-in addons (e.g. Sports) survive the remote reconcile.
+                try {
+                    addonRepository.injectDefaultAddons()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to inject default addons", e)
+                }
             }
 
             val collectionJob = async {
@@ -718,6 +730,11 @@ class StartupSyncService @Inject constructor(
             Log.e(TAG, "Realtime addons pull failed profile=$profileId", e)
         } finally {
             addonRepository.isSyncingFromRemote = false
+        }
+        try {
+            addonRepository.injectDefaultAddons()
+        } catch (e: Exception) {
+            Log.e(TAG, "Realtime addons pull: failed to inject default addons", e)
         }
     }
 

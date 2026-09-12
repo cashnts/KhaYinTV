@@ -20,7 +20,8 @@ class SubtitleJitManager @Inject constructor(
     companion object {
         private const val TAG = "SubtitleJitManager"
         private const val HEARTBEAT_INTERVAL_MS = 12_000L
-        private const val STATUS_POLL_INTERVAL_MS = 15_000L
+        // Fast poll while translation is in-flight; stops once complete
+        private const val STATUS_POLL_INTERVAL_IN_FLIGHT_MS = 4_000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -51,6 +52,26 @@ class SubtitleJitManager @Inject constructor(
             addonName?.contains("KhaYin", ignoreCase = true) == true
     }
 
+    /**
+     * Extract the real media/episode ID from the subtitle URL.
+     * e.g. https://stream.khayin.net/subtitles/vtt/series/tt1234567:1:1.vtt?extra=...
+     * -> "tt1234567:1:1"
+     * Falls back to [mediaId] if the URL filename cannot be parsed.
+     */
+    private fun extractEffectiveId(subtitleUrl: String, mediaId: String): String {
+        return try {
+            subtitleUrl
+                .substringBefore("?")
+                .substringAfterLast("/")
+                .removeSuffix(".vtt")
+                .removeSuffix(".srt")
+                .removeSuffix(".json")
+                .takeIf { it.isNotBlank() } ?: mediaId
+        } catch (_: Exception) {
+            mediaId
+        }
+    }
+
     fun startSession(
         mediaId: String,
         type: String,
@@ -62,8 +83,9 @@ class SubtitleJitManager @Inject constructor(
         } else {
             "movie"
         }
-        val cleanId = mediaId.trim()
-        val sessionKey = "$cleanType:$cleanId:$subtitleUrl"
+        // Use the ID embedded in the subtitle URL (e.g. tt1234567:1:1 for an episode)
+        val effectiveId = extractEffectiveId(subtitleUrl, mediaId.trim())
+        val sessionKey = "$cleanType:$effectiveId:$subtitleUrl"
 
         if (activeSessionId == sessionKey) {
             return
@@ -72,14 +94,22 @@ class SubtitleJitManager @Inject constructor(
         stopSession()
 
         activeSessionId = sessionKey
-        activeMediaId = cleanId
+        activeMediaId = effectiveId
         activeType = cleanType
         activeSubtitleUrl = subtitleUrl
 
-        Log.d(TAG, "Starting JIT session for $cleanType $cleanId ($subtitleUrl)")
+        Log.d(TAG, "Starting JIT session for $cleanType $effectiveId ($subtitleUrl)")
 
-        // 1. Heartbeat loop (every 12 seconds while playing)
+        // 1. Send an immediate heartbeat so the backend starts/continues translation right away
+        scope.launch {
+            sendHeartbeat(isPlaying = true)
+            wasPlayingSent = true
+            lastIsPlaying = true
+        }
+
+        // 2. Heartbeat loop (every 12 seconds while playing). First beat already sent above.
         heartbeatJob = scope.launch {
+            delay(HEARTBEAT_INTERVAL_MS)
             while (isActive && activeSessionId == sessionKey) {
                 if (lastIsPlaying) {
                     sendHeartbeat(isPlaying = true)
@@ -89,36 +119,39 @@ class SubtitleJitManager @Inject constructor(
             }
         }
 
-        // 2. Status check & progressive refetch loop
+        // 3. Status check & progressive refetch loop – starts immediately (no initial delay)
         pollingJob = scope.launch {
             var lastCompletedSections = -1
             var isFinished = false
 
             while (isActive && activeSessionId == sessionKey && !isFinished) {
                 try {
-                    val res = jitApi.getTranslationStatus(cleanId)
+                    val res = jitApi.getTranslationStatus(effectiveId)
                     if (res.isSuccessful && res.body() != null) {
                         val body = res.body()!!
                         val completed = body.completedSections ?: 0
                         Log.d(
                             TAG,
-                            "JIT status for $cleanId: complete=${body.isComplete} inFlight=${body.inFlight} " +
+                            "JIT status for $effectiveId: complete=${body.isComplete} inFlight=${body.inFlight} " +
                                 "sections=$completed/${body.totalSections} progress=${body.progressPercent}%"
                         )
 
                         if (body.isComplete) {
                             isFinished = true
                             onNewCuesAvailable?.invoke(subtitleUrl)
+                            Log.d(TAG, "JIT translation complete for $effectiveId")
                             break
                         } else if (completed > lastCompletedSections || lastCompletedSections == -1) {
                             lastCompletedSections = completed
+                            // Trigger reload whenever new sections arrive
                             onNewCuesAvailable?.invoke(subtitleUrl)
                         }
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "JIT status check error: ${e.message}")
                 }
-                delay(STATUS_POLL_INTERVAL_MS)
+                // Fast poll while in-flight; loop exits via break when complete
+                delay(STATUS_POLL_INTERVAL_IN_FLIGHT_MS)
             }
         }
     }

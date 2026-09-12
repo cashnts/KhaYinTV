@@ -152,7 +152,7 @@ data class Stream(
      * Returns a display name for the stream, or null when no field is usable.
      * UI call sites should substitute a localized fallback (R.string.stream_unknown).
      */
-    fun getDisplayNameOrNull(): String? = name ?: title ?: description
+    fun getDisplayNameOrNull(): String? = (name ?: title ?: description)?.let { dev.khayin.app.core.util.LiveMediaCleaner.cleanStreamLabel(it) }
 
     /**
      * Returns a display name for the stream
@@ -162,7 +162,7 @@ data class Stream(
     /**
      * Returns a display description for the stream
      */
-    fun getDisplayDescription(): String? = description ?: title
+    fun getDisplayDescription(): String? = (description ?: title)?.let { dev.khayin.app.core.util.LiveMediaCleaner.cleanDescription(it, name, false) }
 
     /**
      * Returns a stable key for use in LazyColumn/LazyRow.

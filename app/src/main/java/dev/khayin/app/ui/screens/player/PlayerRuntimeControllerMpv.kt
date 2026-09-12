@@ -338,13 +338,21 @@ private fun PlayerRuntimeController.applyMpvTrackSnapshot(snapshot: MpvTrackSnap
             )
         }
 
-    val selectedAudioIndex = audioTracks.indexOfFirst { it.isSelected }
+    val allowedAudioTracks = audioTracks.filter { PlayerSubtitleUtils.isAllowedAudioTrack(it) }
+    var effectiveAudioIndex = allowedAudioTracks.indexOfFirst { it.isSelected }
+
+    val englishAudio = allowedAudioTracks.firstOrNull { PlayerSubtitleUtils.isEnglishAudioTrack(it) }
+    if (englishAudio != null && effectiveAudioIndex != englishAudio.index) {
+        selectAudioTrack(englishAudio.index)
+        effectiveAudioIndex = englishAudio.index
+    }
+
     val selectedSubtitleIndex = internalSubtitleTracks.indexOfFirst { it.isSelected }
     val selectedExternalSubtitleTrack = snapshot.subtitleTracks.firstOrNull { it.isExternal && it.isSelected }
     val selectedExternalSubtitle = selectedExternalSubtitleTrack != null
     logSwitchTrace(
         stage = "mpv-snapshot-mapped",
-        message = "selectedAudioIndex=$selectedAudioIndex selectedSubtitleIndex=$selectedSubtitleIndex " +
+        message = "selectedAudioIndex=$effectiveAudioIndex selectedSubtitleIndex=$selectedSubtitleIndex " +
             "selectedExternalSubtitle=${selectedExternalSubtitleTrack?.id ?: "none"} " +
             "mappedInternalSubtitleCount=${internalSubtitleTracks.size}"
     )
@@ -352,7 +360,7 @@ private fun PlayerRuntimeController.applyMpvTrackSnapshot(snapshot: MpvTrackSnap
     if (internalSubtitleTracks.isNotEmpty() || hasRenderedFirstFrame) {
         hasScannedTextTracksOnce = true
     }
-    maybeRestorePendingAudioSelectionAfterSubtitleRefresh(audioTracks)
+    maybeRestorePendingAudioSelectionAfterSubtitleRefresh(allowedAudioTracks)
 
     _uiState.update { state ->
         val selectedAddonFromMpvTrack = selectedExternalSubtitleTrack?.let { track ->
@@ -374,25 +382,25 @@ private fun PlayerRuntimeController.applyMpvTrackSnapshot(snapshot: MpvTrackSnap
         }
 
         if (
-            state.audioTracks == audioTracks &&
+            state.audioTracks == allowedAudioTracks &&
             state.subtitleTracks == internalSubtitleTracks &&
-            state.selectedAudioTrackIndex == selectedAudioIndex &&
+            state.selectedAudioTrackIndex == effectiveAudioIndex &&
             state.selectedSubtitleTrackIndex == normalizedSelectedSubtitleIndex &&
             state.selectedAddonSubtitle == addonSelection
         ) {
             state
         } else {
             state.copy(
-                audioTracks = audioTracks,
+                audioTracks = allowedAudioTracks,
                 subtitleTracks = internalSubtitleTracks,
-                selectedAudioTrackIndex = selectedAudioIndex,
+                selectedAudioTrackIndex = effectiveAudioIndex,
                 selectedSubtitleTrackIndex = normalizedSelectedSubtitleIndex,
                 selectedAddonSubtitle = addonSelection
             )
         }
     }
     applyPersistedTrackPreference(
-        audioTracks = audioTracks,
+        audioTracks = allowedAudioTracks,
         subtitleTracks = internalSubtitleTracks
     )
     logSwitchTrace(

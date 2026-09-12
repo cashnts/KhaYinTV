@@ -318,6 +318,62 @@ object PlayerSubtitleUtils {
     }
 
     /**
+     * Checks if an audio track is English.
+     */
+    fun isEnglishAudioTrack(track: TrackInfo): Boolean {
+        val code = track.language?.trim().orEmpty()
+        val lbl = track.name.trim()
+        val id = track.trackId?.trim().orEmpty()
+        val combined = "$code $lbl $id".trim()
+
+        val normalizedCode = normalizeLanguageCode(code).lowercase().substringBefore('-')
+        val normalizedLabel = normalizeLanguageCode(lbl).lowercase().substringBefore('-')
+
+        return normalizedCode == "en" || normalizedCode == "eng" ||
+               normalizedLabel == "en" || normalizedLabel == "eng" ||
+               combined.contains("english", ignoreCase = true) ||
+               code.equals("en", ignoreCase = true) ||
+               code.equals("eng", ignoreCase = true)
+    }
+
+    /**
+     * Checks if an audio track is allowed (strictly English or generic fallback).
+     */
+    fun isAllowedAudioTrack(track: TrackInfo): Boolean {
+        if (isEnglishAudioTrack(track)) return true
+
+        val code = track.language?.trim().orEmpty()
+        val lbl = track.name.trim()
+        val id = track.trackId?.trim().orEmpty()
+        val combined = "$code $lbl $id".trim()
+
+        val normalizedCode = normalizeLanguageCode(code).lowercase().substringBefore('-')
+        if (normalizedCode.isNotBlank() && normalizedCode != "en" && normalizedCode != "eng") {
+            return false
+        }
+
+        if (code.isNotBlank() && code != "und" && code != "unknown" && !code.equals("en", ignoreCase = true) && !code.equals("eng", ignoreCase = true)) {
+            return false
+        }
+
+        val nonEnglishKeywords = listOf(
+            "spanish", "español", "espanol", "french", "français", "francais", "german", "deutsch",
+            "italian", "italiano", "portuguese", "português", "russian", "русский", "hindi", "हिन्दी",
+            "chinese", "mandarin", "cantonese", "中文", "japanese", "nihongo", "日本語", "korean", "한국어",
+            "thai", "vietnamese", "arabic", "turkish", "polish", "dutch", "swedish", "norwegian",
+            "danish", "finnish", "tagalog", "filipino", "indonesian", "burmese", "myanmar"
+        )
+        if (nonEnglishKeywords.any { combined.contains(it, ignoreCase = true) }) {
+            return false
+        }
+
+        val isGenericOrBlank = (code.isBlank() || code == "und" || code == "unknown") &&
+                               (lbl.isBlank() || lbl.matches(Regex("(?i)track\\s*\\d*|audio\\s*\\d*|default|stereo|surround|5\\.1|7\\.1|aac|ac3|eac3|dts|mp3|flac|pcm|main|original|audio track.*")))
+
+        return isGenericOrBlank
+    }
+
+    /**
      * Checks if an addon subtitle is allowed based on language and user tier/access.
      * Allowed: English, Chinese, and Burmese (when hasMyanmarAccess is true).
      */

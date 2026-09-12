@@ -77,6 +77,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.painter.Painter
 import coil3.request.ImageRequest
@@ -230,6 +231,21 @@ fun HeroContentSection(
                 )
             }
 
+            val isSportsItem = dev.khayin.app.core.util.LiveMediaCleaner.isSportsItem(
+                type = meta.apiType,
+                title = meta.name,
+                genres = meta.genres,
+                description = meta.description,
+            )
+            val isSportsLocked = isSportsItem && !dev.khayin.app.features.license.LicenseRepository.isPlusMember
+            var showSportsLockedDialog by remember { mutableStateOf(false) }
+
+            if (showSportsLockedDialog) {
+                dev.khayin.app.features.license.ui.SportsPlusLockedDialog(
+                    onDismiss = { showSportsLockedDialog = false },
+                )
+            }
+
             // Everything below the logo fades out during trailer
             AnimatedVisibility(
                 visible = !isTrailerPlaying,
@@ -242,9 +258,16 @@ fun HeroContentSection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         PlayButton(
-                            text = nextToWatch?.displayText,
-                            onClick = onPlayClick,
-                            onLongPress = onPlayLongPress,
+                            text = if (isSportsLocked) "Upgrade to Plus" else nextToWatch?.displayText,
+                            isLocked = isSportsLocked,
+                            onClick = {
+                                if (isSportsLocked) {
+                                    showSportsLockedDialog = true
+                                } else {
+                                    onPlayClick()
+                                }
+                            },
+                            onLongPress = if (isSportsLocked) null else onPlayLongPress,
                             focusRequester = playButtonFocusRequester,
                             restoreFocusToken = restorePlayFocusToken,
                             onFocusRestored = {
@@ -415,6 +438,7 @@ fun HeroContentSection(
 @Composable
 private fun PlayButton(
     text: String?,
+    isLocked: Boolean = false,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
@@ -434,6 +458,10 @@ private fun PlayButton(
         context = context,
         rawRes = dev.khayin.app.R.raw.ic_player_play
     )
+
+    val containerColor = if (isLocked) Color(0xFFFF9500) else androidx.compose.ui.graphics.Color.White
+    val focusedContainerColor = if (isLocked) Color(0xFFFFB74D) else androidx.compose.ui.graphics.Color.White
+    val contentColor = Color.Black
 
     Button(
         onClick = {
@@ -481,10 +509,10 @@ private fun PlayButton(
             }
             .focusProperties { up = FocusRequester.Cancel },
         colors = ButtonDefaults.colors(
-            containerColor = androidx.compose.ui.graphics.Color.White,
-            focusedContainerColor = androidx.compose.ui.graphics.Color.White,
-            contentColor = androidx.compose.ui.graphics.Color.Black,
-            focusedContentColor = androidx.compose.ui.graphics.Color.Black
+            containerColor = containerColor,
+            focusedContainerColor = focusedContainerColor,
+            contentColor = contentColor,
+            focusedContentColor = contentColor
         ),
         shape = ButtonDefaults.shape(
             shape = RoundedCornerShape(NuvioTheme.spacing.xxl)
@@ -507,11 +535,19 @@ private fun PlayButton(
                 )
             )
         ) {
-            Icon(
-                painter = playPainter,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
+            if (isLocked) {
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Rounded.Lock,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+            } else {
+                Icon(
+                    painter = playPainter,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
             AnimatedVisibility(
                 visible = text != null,
                 enter = fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.fast)),

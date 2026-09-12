@@ -136,6 +136,15 @@ fun StreamScreen(
         initialValue = StreamBadgeSettings()
     )
     val scope = rememberCoroutineScope()
+    var showSportsLockedDialog by remember { mutableStateOf(false) }
+    val isSportsItem = remember(uiState.title, uiState.genres, uiState.contentType) {
+        dev.khayin.app.core.util.LiveMediaCleaner.isSportsItem(
+            type = uiState.contentType,
+            title = uiState.title,
+            genres = uiState.genres?.split(",") ?: emptyList()
+        )
+    }
+    val isSportsLocked = isSportsItem && !dev.khayin.app.features.license.LicenseRepository.isPlusMember
 
     LaunchedEffect(restoreSourceSelection) {
         if (restoreSourceSelection) {
@@ -434,6 +443,10 @@ fun StreamScreen(
                     onAddonFilterSelected = { viewModel.onEvent(StreamScreenEvent.OnAddonFilterSelected(it)) },
                     onRefresh = { viewModel.onEvent(StreamScreenEvent.OnRefresh) },
                     onStreamSelected = { stream ->
+                        if (isSportsLocked) {
+                            showSportsLockedDialog = true
+                            return@RightStreamSection
+                        }
                         val currentIndex = uiState.filteredStreams.indexOfFirst {
                             it.url == stream.url &&
                                 it.infoHash == stream.infoHash &&
@@ -466,6 +479,12 @@ fun StreamScreen(
                         .fillMaxHeight()
                 )
             }
+        }
+
+        if (showSportsLockedDialog) {
+            dev.khayin.app.features.license.ui.SportsPlusLockedDialog(
+                onDismiss = { showSportsLockedDialog = false }
+            )
         }
 
         // Player choice dialog for "Ask every time" preference
@@ -610,6 +629,7 @@ private fun LeftContentSection(
                 .build()
         }
     }
+    val cleanedTitle = remember(title) { dev.khayin.app.core.util.LiveMediaCleaner.cleanTitle(title) }
     val infoText = remember(genres, year) {
         listOfNotNull(genres, year).joinToString(" • ")
     }
@@ -625,7 +645,7 @@ private fun LeftContentSection(
             if (logoModel != null && !logoLoadFailed) {
                 AsyncImage(
                     model = logoModel,
-                    contentDescription = title,
+                    contentDescription = cleanedTitle,
                     onError = { logoLoadFailed = true },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -635,7 +655,7 @@ private fun LeftContentSection(
                 )
             } else {
                 Text(
-                    text = title,
+                    text = cleanedTitle,
                     style = MaterialTheme.typography.displaySmall,
                     color = NuvioTheme.colors.TextPrimary,
                     maxLines = 3,

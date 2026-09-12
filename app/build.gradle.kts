@@ -96,13 +96,13 @@ val releaseStorePasswordValue = env("KHAYIN_RELEASE_STORE_PASSWORD")
 android {
     namespace = "dev.khayin.app"
     compileSdk = 36
-    // ndkVersion = "29.0.14206865"
+    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "dev.khayin.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 8
+        versionCode = 10
         versionName = "1.0.7"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")

@@ -235,6 +235,7 @@ private fun ModernCatalogRowItem(
     expandedTrailerPreviewUrl: () -> String?,
     expandedTrailerPreviewAudioUrl: () -> String?,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
+    isRowLocked: Boolean = false,
     isFocusTarget: Boolean = false,
     onFocused: () -> Unit,
     onItemFocus: (MetaPreview) -> Unit,
@@ -256,6 +257,20 @@ private fun ModernCatalogRowItem(
 
     val metaPreview = item.metaPreview
     val isWatched = metaPreview?.let { isCatalogItemWatched(it) } ?: false
+    val isSportsItem = dev.khayin.app.core.util.LiveMediaCleaner.isSportsItem(
+        title = item.title,
+        genres = metaPreview?.genres.orEmpty(),
+        description = metaPreview?.description,
+    )
+    val itemLocked = isRowLocked || (!dev.khayin.app.features.license.LicenseRepository.isPlusMember && isSportsItem)
+    var showSportsLockedDialog by remember { mutableStateOf(false) }
+
+    if (showSportsLockedDialog) {
+        dev.khayin.app.features.license.ui.SportsPlusLockedDialog(
+            onDismiss = { showSportsLockedDialog = false },
+        )
+    }
+
     val enrichedMeta by remember {
         derivedStateOf { (payload as? ModernPayload.Catalog)?.itemId?.let { enrichedPreviews.value.map[it] } }
     }
@@ -382,6 +397,7 @@ private fun ModernCatalogRowItem(
         trailerPreviewUrl = trailerPreviewUrl,
         trailerPreviewAudioUrl = trailerPreviewAudioUrl,
         isWatched = isWatched,
+        isLocked = itemLocked,
         enrichedLogoUrl = enrichedLogoUrl,
         enrichedBackdropUrl = enrichedBackdropUrl,
         focusRequester = requester,
@@ -392,6 +408,10 @@ private fun ModernCatalogRowItem(
             isCardFocused = focused
         },
         onClick = {
+            if (itemLocked) {
+                showSportsLockedDialog = true
+                return@ModernCarouselCard
+            }
             latestOnFocused()
             item.metaPreview?.let { latestOnItemFocus(it) }
             when (payload) {
@@ -413,7 +433,7 @@ private fun ModernCatalogRowItem(
                 is ModernPayload.ContinueWatching -> Unit
             }
         },
-        onLongPress = onLongPress,
+        onLongPress = if (itemLocked) { {} } else onLongPress,
         onBackdropInteraction = onBackdropInteraction,
         onTrailerEnded = { onExpandedCatalogFocusKeyChange(null) }
     )
@@ -498,6 +518,12 @@ internal fun ModernRowSection(
             } else Modifier
         )
     ) {
+        val isSportsCatalog = dev.khayin.app.core.util.LiveMediaCleaner.isSportsCatalog(
+            name = row.title,
+            catalogId = row.key,
+        )
+        val isRowLocked = isSportsCatalog && !dev.khayin.app.features.license.LicenseRepository.isPlusMember
+
         val titleMediumStyle = MaterialTheme.typography.titleMedium
         val rowTitleStyle = remember(titleMediumStyle) {
             titleMediumStyle.copy(fontWeight = FontWeight.SemiBold)
@@ -507,12 +533,20 @@ internal fun ModernRowSection(
         val textModifier = remember(rowTitleBottom) {
             Modifier.padding(start = 52.dp, bottom = rowTitleBottom)
         }
-        Text(
-            text = rowTitle,
-            style = rowTitleStyle,
-            color = textColor,
-            modifier = textModifier
-        )
+        androidx.compose.foundation.layout.Row(
+            modifier = textModifier,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = rowTitle,
+                style = rowTitleStyle,
+                color = textColor,
+            )
+            if (isRowLocked) {
+                dev.khayin.app.features.license.ui.SportsLockPill()
+            }
+        }
 
         val rowListState = rowListStates.getOrPut(row.key) {
             LazyListState(
@@ -985,6 +1019,7 @@ internal fun ModernRowSection(
                                 landscapeCatalogCardWidth = landscapeCatalogCardWidth,
                                 landscapeCatalogCardHeight = landscapeCatalogCardHeight,
                                 isCatalogItemWatched = isCatalogItemWatched,
+                                isRowLocked = isRowLocked,
                                 onFocused = onFocused,
                                 onItemFocus = onItemFocus,
                                 onPreloadAdjacentItem = remember(nextCatalogItem, prevCatalogItem, onPreloadAdjacentItem) {
@@ -1028,6 +1063,7 @@ private fun ModernCarouselCard(
     trailerPreviewUrl: String?,
     trailerPreviewAudioUrl: String?,
     isWatched: Boolean,
+    isLocked: Boolean = false,
     enrichedLogoUrl: String? = null,
     enrichedBackdropUrl: String? = null,
     focusRequester: FocusRequester,
@@ -1423,7 +1459,16 @@ private fun ModernCarouselCard(
                     )
                 }
 
-                if (isWatched) {
+                if (isLocked) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = NuvioTheme.spacing.sm, top = NuvioTheme.spacing.sm)
+                            .zIndex(3f)
+                    ) {
+                        dev.khayin.app.features.license.ui.SportsLockPill()
+                    }
+                } else if (isWatched) {
                     WatchedMarker(
                         modifier = Modifier
                             .align(Alignment.TopEnd)

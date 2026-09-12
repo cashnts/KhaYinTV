@@ -6,9 +6,11 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import dev.khayin.app.domain.model.Subtitle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 internal fun PlayerRuntimeController.filterEpisodeStreamsByAddon(addonName: String?) {
     val allStreams = _uiState.value.episodeAllStreams
@@ -447,23 +449,25 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
         val normalizedLang = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
         val trackTitle = buildAddonSubtitleTrackId(subtitle)
         scope.launch {
-            val localPath = try {
-                val decodedBody = downloadSubtitleBody(subtitle.url, subtitle.lang)
-                val sanitized = SubtitleMojibakeSanitizer.sanitize(decodedBody).toString()
-                val cacheDir = java.io.File(context.cacheDir, "subtitles").also { it.mkdirs() }
-                val sniffedMime = PlayerSubtitleUtils.sniffSubtitleMimeType(sanitized, subtitle.url)
-                val ext = when (sniffedMime) {
-                    androidx.media3.common.MimeTypes.TEXT_VTT -> "vtt"
-                    androidx.media3.common.MimeTypes.TEXT_SSA -> "ass"
-                    androidx.media3.common.MimeTypes.APPLICATION_TTML -> "ttml"
-                    else -> if (subtitle.url.contains(".vtt", ignoreCase = true)) "vtt" else "srt"
+            val localPath = withContext(Dispatchers.IO) {
+                try {
+                    val decodedBody = downloadSubtitleBody(subtitle.url, subtitle.lang)
+                    val sanitized = SubtitleMojibakeSanitizer.sanitize(decodedBody).toString()
+                    val cacheDir = java.io.File(context.cacheDir, "subtitles").also { it.mkdirs() }
+                    val sniffedMime = PlayerSubtitleUtils.sniffSubtitleMimeType(sanitized, subtitle.url)
+                    val ext = when (sniffedMime) {
+                        androidx.media3.common.MimeTypes.TEXT_VTT -> "vtt"
+                        androidx.media3.common.MimeTypes.TEXT_SSA -> "ass"
+                        androidx.media3.common.MimeTypes.APPLICATION_TTML -> "ttml"
+                        else -> if (subtitle.url.contains(".vtt", ignoreCase = true)) "vtt" else "srt"
+                    }
+                    val file = java.io.File(cacheDir, "mpv_${subtitle.id.hashCode()}.$ext")
+                    file.writeText(sanitized, Charsets.UTF_8)
+                    file.absolutePath
+                } catch (e: Exception) {
+                    Log.w(PlayerRuntimeController.TAG, "Failed to cache normalized subtitle for MPV, falling back to URL", e)
+                    subtitle.url
                 }
-                val file = java.io.File(cacheDir, "mpv_${subtitle.id.hashCode()}.$ext")
-                file.writeText(sanitized, Charsets.UTF_8)
-                file.absolutePath
-            } catch (e: Exception) {
-                Log.w(PlayerRuntimeController.TAG, "Failed to cache normalized subtitle for MPV, falling back to URL", e)
-                subtitle.url
             }
 
             val added = mpvView?.addAndSelectExternalSubtitle(

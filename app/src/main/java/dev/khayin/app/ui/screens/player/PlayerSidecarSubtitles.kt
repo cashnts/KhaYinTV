@@ -138,6 +138,47 @@ internal fun PlayerRuntimeController.startSidecarAddonSubtitle(subtitle: Subtitl
         view.setCues(emptyList())
     }
 
+    val isJit = subtitleJitManager.isJitSubtitle(subtitle.url, subtitle.addonName)
+    if (isJit) {
+        val mediaType = if (contentType?.lowercase() in listOf("series", "tv")) "series" else "movie"
+        val mediaId = videoId ?: contentId ?: "anonymous"
+        subtitleJitManager.startSession(
+            mediaId = mediaId,
+            type = mediaType,
+            subtitleUrl = subtitle.url,
+            onNewCuesAvailable = { url ->
+                if (activeSidecarSubtitleKey != subtitleKey) return@startSession
+                try {
+                    val nextBody = downloadSubtitleBody(url, subtitle.lang)
+                    if (activeSidecarSubtitleKey != subtitleKey) return@startSession
+                    val nextParse = withContext(Dispatchers.Default) {
+                        parseSidecarTimedCuesRobust(nextBody, url)
+                    }
+                    if (nextParse.cues.size > sidecarTimedCues.size) {
+                        Log.d(
+                            PlayerRuntimeController.TAG,
+                            "JIT subtitle progressive update: ${sidecarTimedCues.size} -> ${nextParse.cues.size} cues"
+                        )
+                        sidecarTimedCues = nextParse.cues
+                        lastSidecarCueSignature = null
+                        _uiState.update {
+                            it.copy(
+                                isSubtitleLoading = false,
+                                subtitleLoadingMessage = null
+                            )
+                        }
+                        postToSubtitleView { view ->
+                            view.setTag(R.id.player_view_sidecar_generation_tag, subtitleKey)
+                        }
+                        renderSidecarCuesAtCurrentPosition()
+                    }
+                } catch (e: Exception) {
+                    Log.w(PlayerRuntimeController.TAG, "JIT progressive update error: ${e.message}")
+                }
+            }
+        )
+    }
+
     sidecarSubtitleJob = scope.launch {
         try {
             val rawBody = downloadSubtitleBody(subtitle.url, subtitle.lang)
@@ -150,23 +191,40 @@ internal fun PlayerRuntimeController.startSidecarAddonSubtitle(subtitle: Subtitl
             if (activeSidecarSubtitleKey != subtitleKey) return@launch
 
             if (parseResult.cues.isEmpty()) {
-                Log.w(
-                    PlayerRuntimeController.TAG,
-                    "Sidecar subtitle parse empty for id=${subtitle.id} " +
-                        "urlMime=$urlMimeHint sniffed=$resolvedMime " +
-                        "(buffer preserved; no media reload)"
-                )
-                dev.khayin.app.core.analytics.PostHogAnalytics.trackSubtitleError(
-                    errorType = "sidecar_parse_empty",
-                    errorMessage = "Parsed 0 cues from subtitle body",
-                    subtitleId = subtitle.id,
-                    subtitleUrl = subtitle.url,
-                    language = subtitle.lang,
-                    addonName = subtitle.addonName,
-                    mimeType = resolvedMime
-                )
-                activeSidecarSubtitleKey = null
-                sidecarTimedCues = emptyList()
+                if (!isJit) {
+                    Log.w(
+                        PlayerRuntimeController.TAG,
+                        "Sidecar subtitle parse empty for id=${subtitle.id} " +
+                            "urlMime=$urlMimeHint sniffed=$resolvedMime " +
+                            "(buffer preserved; no media reload)"
+                    )
+                    dev.khayin.app.core.analytics.PostHogAnalytics.trackSubtitleError(
+                        errorType = "sidecar_parse_empty",
+                        errorMessage = "Parsed 0 cues from subtitle body",
+                        subtitleId = subtitle.id,
+                        subtitleUrl = subtitle.url,
+                        language = subtitle.lang,
+                        addonName = subtitle.addonName,
+                        mimeType = resolvedMime
+                    )
+                    activeSidecarSubtitleKey = null
+                    sidecarTimedCues = emptyList()
+                    _uiState.update {
+                        it.copy(
+                            isSubtitleLoading = false,
+                            subtitleLoadingMessage = null
+                        )
+                    }
+                    postToSubtitleView { view ->
+                        view.setTag(R.id.player_view_sidecar_generation_tag, null)
+                        view.setCues(emptyList())
+                    }
+                    return@launch
+                } else {
+                    Log.d(PlayerRuntimeController.TAG, "Initial JIT cues empty, waiting for background translation")
+                }
+            } else {
+                sidecarTimedCues = parseResult.cues
                 _uiState.update {
                     it.copy(
                         isSubtitleLoading = false,
@@ -174,58 +232,13 @@ internal fun PlayerRuntimeController.startSidecarAddonSubtitle(subtitle: Subtitl
                     )
                 }
                 postToSubtitleView { view ->
-                    view.setTag(R.id.player_view_sidecar_generation_tag, null)
-                    view.setCues(emptyList())
+                    view.setTag(R.id.player_view_sidecar_generation_tag, subtitleKey)
                 }
-                return@launch
-            }
-
-            sidecarTimedCues = parseResult.cues
-            _uiState.update {
-                it.copy(
-                    isSubtitleLoading = false,
-                    subtitleLoadingMessage = null
-                )
-            }
-            postToSubtitleView { view ->
-                view.setTag(R.id.player_view_sidecar_generation_tag, subtitleKey)
-            }
-            Log.d(
-                PlayerRuntimeController.TAG,
-                "Sidecar subtitle ready id=${subtitle.id} cues=${parseResult.cues.size} " +
-                    "mime=${parseResult.effectiveMime} source=${parseResult.source} " +
-                    "(buffer preserved)"
-            )
-
-            // For KhaYin JIT generated subtitles: coordinate player heartbeats and progressive section updates
-            if (subtitleJitManager.isJitSubtitle(subtitle.url, subtitle.addonName)) {
-                val mediaType = if (contentType?.lowercase() in listOf("series", "tv")) "series" else "movie"
-                val mediaId = videoId ?: contentId ?: "anonymous"
-                subtitleJitManager.startSession(
-                    mediaId = mediaId,
-                    type = mediaType,
-                    subtitleUrl = subtitle.url,
-                    onNewCuesAvailable = { url ->
-                        if (activeSidecarSubtitleKey != subtitleKey) return@startSession
-                        try {
-                            val nextBody = downloadSubtitleBody(url, subtitle.lang)
-                            if (activeSidecarSubtitleKey != subtitleKey) return@startSession
-                            val nextParse = withContext(Dispatchers.Default) {
-                                parseSidecarTimedCuesRobust(nextBody, url)
-                            }
-                            if (nextParse.cues.size > sidecarTimedCues.size) {
-                                Log.d(
-                                    PlayerRuntimeController.TAG,
-                                    "JIT subtitle progressive update: ${sidecarTimedCues.size} -> ${nextParse.cues.size} cues"
-                                )
-                                sidecarTimedCues = nextParse.cues
-                                lastSidecarCueSignature = null
-                                renderSidecarCuesAtCurrentPosition()
-                            }
-                        } catch (e: Exception) {
-                            Log.w(PlayerRuntimeController.TAG, "JIT progressive update error: ${e.message}")
-                        }
-                    }
+                Log.d(
+                    PlayerRuntimeController.TAG,
+                    "Sidecar subtitle ready id=${subtitle.id} cues=${parseResult.cues.size} " +
+                        "mime=${parseResult.effectiveMime} source=${parseResult.source} " +
+                        "(buffer preserved)"
                 )
             }
 

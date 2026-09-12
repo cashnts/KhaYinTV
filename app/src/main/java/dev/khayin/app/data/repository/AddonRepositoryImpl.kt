@@ -49,7 +49,21 @@ class AddonRepositoryImpl @Inject constructor(
         private const val MANIFEST_CACHE_KEY = "manifests_v2"
         private const val LEGACY_MANIFEST_CACHE_KEY = "manifests"
         private const val MANIFEST_SUFFIX = "/manifest.json"
-        private const val MANIFEST_CACHE_TTL_MS = 6 * 60 * 60 * 1000L 
+        private const val MANIFEST_CACHE_TTL_MS = 6 * 60 * 60 * 1000L
+        const val DEFAULT_CINEMETA_ADDON_URL = "https://v3-cinemeta.strem.io/manifest.json"
+        const val DEFAULT_NUVIO_CATALOG_ADDON_URL = "https://catalog.nuvio.tv/manifest.json"
+        const val DEFAULT_KHAYIN_STREAM_ADDON_URL = "https://stream.khayin.net/manifest.json"
+        const val DEFAULT_OPENSUBTITLES_ADDON_URL = "https://opensubtitles-v3.strem.io/manifest.json"
+        const val DEFAULT_SPORTS_ADDON_URL = "https://premium.highfly.dev/fd47b1a7-5d08-4e24-ae97-9e9fe91d6321/eyJpbmNsdWRlU3BvcnRzIjpbImZvb3RiYWxsIiwiYmFza2V0YmFsbCIsIm1vdG9yLXNwb3J0cyJdLCJoaWRlVGl0bGVzIjp0cnVlLCJoaWRlRGVzY3JpcHRpb25zIjp0cnVlLCJ0aW1lem9uZSI6Ik1NVCIsInNvcnRTdHJlYW1zIjoicXVhbGl0eS1oaWdoIiwibmFtZVRwbCI6IntzdHJlYW0uY2hhbm5lbE5hbWV9IHwge3N0cmVhbS5jYXRlZ29yeX0ifQ/manifest.json"
+
+        /** Locked addons that cannot be removed or disabled by the user. */
+        val LOCKED_ADDON_URLS: Set<String> = setOf(
+            DEFAULT_CINEMETA_ADDON_URL,
+            DEFAULT_NUVIO_CATALOG_ADDON_URL,
+            DEFAULT_KHAYIN_STREAM_ADDON_URL,
+            DEFAULT_OPENSUBTITLES_ADDON_URL,
+            DEFAULT_SPORTS_ADDON_URL,
+        )
     }
 
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -246,8 +260,30 @@ class AddonRepositoryImpl @Inject constructor(
         triggerRemoteSync()
     }
 
+    /**
+     * Ensures all locked built-in addons (e.g. Sports) are present in local preferences.
+     * Safe to call multiple times — no-ops if already installed.
+     */
+    suspend fun injectDefaultAddons() {
+        LOCKED_ADDON_URLS.forEach { url ->
+            val canonical = canonicalizeUrl(url)
+            val alreadyInstalled = preferences.installedAddonUrls.first()
+                .any { normalizeUrl(it) == normalizeUrl(canonical) }
+            if (!alreadyInstalled) {
+                Log.d(TAG, "injectDefaultAddons: adding locked built-in $canonical")
+                preferences.addAddon(canonical)
+                // Pre-fetch the manifest so it appears immediately
+                fetchAddon(canonical)
+            }
+        }
+    }
+
     override suspend fun removeAddon(url: String) {
         val cleanUrl = canonicalizeUrl(url)
+        if (LOCKED_ADDON_URLS.any { normalizeUrl(it) == normalizeUrl(cleanUrl) }) {
+            Log.w(TAG, "removeAddon: blocked — $cleanUrl is a locked built-in")
+            return
+        }
         if (!preferences.removeAddon(cleanUrl)) return
         if (removeCachedManifest(cleanUrl)) {
             persistManifestCacheToDisk()
@@ -263,8 +299,10 @@ class AddonRepositoryImpl @Inject constructor(
 
     override suspend fun setAddonEnabled(url: String, enabled: Boolean) {
         val cleanUrl = canonicalizeUrl(url)
-        if (!preferences.setAddonEnabled(cleanUrl, enabled)) return
-        if (enabled && getCachedManifest(cleanUrl) == null) {
+        // Locked built-ins are always enabled — ignore disable requests.
+        val targetEnabled = if (LOCKED_ADDON_URLS.any { normalizeUrl(it) == normalizeUrl(cleanUrl) }) true else enabled
+        if (!preferences.setAddonEnabled(cleanUrl, targetEnabled)) return
+        if (targetEnabled && getCachedManifest(cleanUrl) == null) {
             fetchAddon(cleanUrl)
         }
         triggerRemoteSync()
@@ -311,6 +349,11 @@ class AddonRepositoryImpl @Inject constructor(
             remoteOrdered + extras
         }
 
+        // Always guarantee locked built-in addons are present, regardless of what the remote says.
+        val lockedCanonical = LOCKED_ADDON_URLS.map { canonicalizeUrl(it) }
+        val finalWithLocked = (lockedCanonical + finalList)
+            .distinctBy { normalizeUrl(it) }
+
         if (shouldRemoveMissingLocal) {
             val removedAny = initialLocalUrls
                 .filter { normalizeUrl(it) !in remoteSet }
@@ -324,8 +367,8 @@ class AddonRepositoryImpl @Inject constructor(
 
 
         val currentCanonical = initialLocalUrls.map { canonicalizeUrl(it) }
-        if (finalList != currentCanonical) {
-            preferences.setAddonOrder(finalList)
+        if (finalWithLocked != currentCanonical) {
+            preferences.setAddonOrder(finalWithLocked)
         }
     }
 

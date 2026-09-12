@@ -288,8 +288,17 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
         pendingAddonSubtitleLanguage = null
     }
 
-    maybeRestorePendingAudioSelectionAfterSubtitleRefresh(audioTracks)?.let { restoredIndex ->
-        selectedAudioIndex = restoredIndex
+    val allowedAudioTracks = audioTracks.filter { PlayerSubtitleUtils.isAllowedAudioTrack(it) }
+    var effectiveAudioIndex = selectedAudioIndex
+
+    maybeRestorePendingAudioSelectionAfterSubtitleRefresh(allowedAudioTracks)?.let { restoredIndex ->
+        effectiveAudioIndex = restoredIndex
+    }
+
+    val englishAudio = allowedAudioTracks.firstOrNull { PlayerSubtitleUtils.isEnglishAudioTrack(it) }
+    if (englishAudio != null && effectiveAudioIndex != englishAudio.index) {
+        selectAudioTrack(englishAudio.index)
+        effectiveAudioIndex = englishAudio.index
     }
 
     _uiState.update { state ->
@@ -299,24 +308,24 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
             else -> state.selectedSubtitleTrackIndex
         }
         state.copy(
-            audioTracks = audioTracks,
+            audioTracks = allowedAudioTracks,
             subtitleTracks = subtitleTracks,
-            selectedAudioTrackIndex = selectedAudioIndex,
+            selectedAudioTrackIndex = effectiveAudioIndex,
             selectedSubtitleTrackIndex = finalSubtitleIndex
         )
     }
-    updateAudioControlAvailability(audioTracks, selectedAudioIndex)
+    updateAudioControlAvailability(allowedAudioTracks, effectiveAudioIndex)
     logSwitchTrace(
         stage = "exo-tracks-update-end",
-        message = "audioCount=${audioTracks.size} subtitleCount=${subtitleTracks.size} " +
-                "selectedAudioIndex=$selectedAudioIndex selectedSubtitleIndex=$selectedSubtitleIndex"
+        message = "audioCount=${allowedAudioTracks.size} subtitleCount=${subtitleTracks.size} " +
+                "selectedAudioIndex=$effectiveAudioIndex selectedSubtitleIndex=$selectedSubtitleIndex"
     )
     rememberEffectiveExoSubtitleSelectionForEngineSwitch(
         subtitleTracks = subtitleTracks,
         selectedSubtitleIndex = selectedSubtitleIndex
     )
     applyPersistedTrackPreference(
-        audioTracks = audioTracks,
+        audioTracks = allowedAudioTracks,
         subtitleTracks = subtitleTracks
     )
     if (currentStreamHasVideoTrack) {

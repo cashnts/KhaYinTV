@@ -93,6 +93,7 @@ fun ContentCard(
     trailerPreviewAudioUrl: String? = null,
     onRequestTrailerPreview: (MetaPreview) -> Unit = {},
     isWatched: Boolean = false,
+    isLocked: Boolean = false,
     onFocus: (MetaPreview) -> Unit = {},
     onBackdropExpandedChanged: ((Boolean) -> Unit)? = null,
     expandedDownFocusRequester: FocusRequester? = null,
@@ -502,7 +503,16 @@ fun ContentCard(
                     }
                 }
 
-                if (isWatched) {
+                if (isLocked) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = NuvioTheme.spacing.sm, top = NuvioTheme.spacing.sm)
+                            .zIndex(3f)
+                    ) {
+                        dev.khayin.app.features.license.ui.SportsLockPill()
+                    }
+                } else if (isWatched) {
                     WatchedMarker(
                         modifier = Modifier
                             .align(Alignment.TopEnd)

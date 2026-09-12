@@ -16,13 +16,14 @@ class ApkDownloader @Inject constructor(
         url: String,
         destinationFile: File,
         onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit
-    ): Result<File> {
-        return runCatching {
+    ): Result<File> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching {
             destinationFile.parentFile?.mkdirs()
             if (destinationFile.exists()) destinationFile.delete()
 
             val request = Request.Builder()
                 .url(url)
+                .header("User-Agent", "KhaYinTV-Updater")
                 .build()
 
             okHttpClient.newCall(request).execute().use { response ->
@@ -30,7 +31,7 @@ class ApkDownloader @Inject constructor(
                     error("Download failed: HTTP ${response.code}")
                 }
 
-                val body = response.body ?: error("Empty download body")
+                val body = response.body
                 val total = body.contentLength().takeIf { it > 0 }
 
                 body.byteStream().use { input ->

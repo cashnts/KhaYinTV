@@ -665,7 +665,15 @@ class SearchViewModel @Inject constructor(
                         type = catalog.apiType,
                         catalogId = catalog.id
                     )
-                    catalogsMap[key] = result.data
+                    val sortedItems = if (query.isNotBlank()) {
+                        result.data.items.sortedWith(
+                            compareByDescending<MetaPreview> { calculateSearchRelevanceScore(it.name, query, it) }
+                                .thenBy { it.name.length }
+                        )
+                    } else {
+                        result.data.items
+                    }
+                    catalogsMap[key] = result.data.copy(items = sortedItems)
                     pendingCatalogResponses = (pendingCatalogResponses - 1).coerceAtLeast(0)
                     scheduleCatalogRowsUpdate()
                 }
@@ -787,8 +795,22 @@ class SearchViewModel @Inject constructor(
             } else {
                 orderedRows
             }
+            val currentQuery = state.submittedQuery.trim().ifBlank { state.query.trim() }
+            val rankedRows = if (currentQuery.isNotBlank()) {
+                filteredRows.sortedWith(
+                    compareByDescending<CatalogRow> { row ->
+                        row.items.filterNot { it.id.startsWith("__placeholder_") }
+                            .maxOfOrNull { calculateSearchRelevanceScore(it.name, currentQuery, it) } ?: 0.0
+                    }.thenByDescending { row ->
+                        val realItems = row.items.filterNot { it.id.startsWith("__placeholder_") }
+                        if (realItems.isEmpty()) 0.0 else realItems.take(3).map { calculateSearchRelevanceScore(it.name, currentQuery, it) }.average()
+                    }
+                )
+            } else {
+                filteredRows
+            }
             state.copy(
-                catalogRows = filteredRows
+                catalogRows = rankedRows
             )
         }
     }
@@ -1096,3 +1118,68 @@ internal fun resolveDiscoverCatalog(
     catalogs.firstOrNull { it.key == preferredKey }
         ?: catalogs.firstOrNull { it.key == currentKey }
         ?: catalogs.firstOrNull()
+
+internal fun calculateSearchRelevanceScore(name: String, query: String, item: MetaPreview? = null): Double {
+    val cleanName = name.trim().lowercase()
+    val cleanQuery = query.trim().lowercase()
+    if (cleanName.isEmpty() || cleanQuery.isEmpty()) return 0.0
+
+    var score = 0.0
+
+    // 1. Exact match (e.g., "Loki" == "loki")
+    if (cleanName == cleanQuery) {
+        score = 10000.0
+    } else {
+        // 2. Exact match ignoring punctuation
+        val strippedName = cleanName.filter { it.isLetterOrDigit() || it.isWhitespace() }
+        val strippedQuery = cleanQuery.filter { it.isLetterOrDigit() || it.isWhitespace() }
+        if (strippedName == strippedQuery && strippedName.isNotEmpty()) {
+            score = 9000.0
+        } else if (cleanName.startsWith("$cleanQuery ") || cleanName.startsWith("$cleanQuery:") || cleanName.startsWith("$cleanQuery-")) {
+            // 3. Exact word boundary match: title is "Loki: Season 1" or "Loki (2021)"
+            score = 7000.0 - (cleanName.length - cleanQuery.length).coerceAtMost(1000) * 2.0
+        } else if (cleanName.startsWith(cleanQuery)) {
+            // 4. Starts with query prefix (e.g. "Loki 7")
+            score = 5000.0 - (cleanName.length - cleanQuery.length).coerceAtMost(1000) * 3.0
+        } else {
+            val words = cleanName.split(Regex("[^a-zA-Z0-9]+")).filter { it.isNotBlank() }
+            if (words.any { it == cleanQuery }) {
+                // 5. Query matches a standalone word in the title (e.g. "Thor & Loki" or "Marvel's Loki")
+                score = 3500.0 - (cleanName.length - cleanQuery.length).coerceAtMost(1000) * 2.0
+            } else if (words.any { it.startsWith(cleanQuery) }) {
+                // 6. Word starts with query
+                score = 2000.0 - (cleanName.length - cleanQuery.length).coerceAtMost(1000) * 2.0
+            } else {
+                // 7. Substring match
+                val index = cleanName.indexOf(cleanQuery)
+                if (index >= 0) {
+                    score = 1000.0 - (index * 50.0).coerceAtMost(500.0) - (cleanName.length - cleanQuery.length).coerceAtMost(400)
+                }
+            }
+        }
+    }
+
+    if (score <= 0.0) return 0.0
+
+    if (item != null) {
+        val rating = item.imdbRating?.toDouble() ?: 0.0
+        if (rating > 0.0) {
+            score += rating * 150.0
+        }
+
+        val votes = item.voteCount ?: 0
+        if (votes > 0) {
+            score += (kotlin.math.log10(votes.toDouble() + 1.0) * 150.0).coerceAtMost(600.0)
+        }
+
+        if (!item.poster.isNullOrBlank() && !item.poster.contains("placeholder", ignoreCase = true)) {
+            score += 300.0
+        }
+
+        if (!item.releaseInfo.isNullOrBlank()) {
+            score += 100.0
+        }
+    }
+
+    return score
+}

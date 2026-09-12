@@ -14,6 +14,12 @@ interface GitHubReleaseApi {
         @Path("repo") repo: String
     ): Response<GitHubReleaseDto>
 
+    @GET("repos/{owner}/{repo}/releases")
+    suspend fun getReleases(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String
+    ): Response<List<GitHubReleaseDto>>
+
     @GET("repos/{owner}/{repo}/contributors")
     suspend fun getContributors(
         @Path("owner") owner: String,
