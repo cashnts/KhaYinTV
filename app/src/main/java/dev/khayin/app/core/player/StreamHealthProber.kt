@@ -1,5 +1,7 @@
 package dev.khayin.app.core.player
 
+import dev.khayin.app.core.network.NetworkQualityTier
+import dev.khayin.app.core.network.NetworkQualityTracker
 import dev.khayin.app.domain.model.Stream
 import dev.khayin.app.domain.model.isConfirmedCached
 import dev.khayin.app.domain.model.isLowQualitySource
@@ -117,6 +119,8 @@ object StreamHealthProber {
         }
 
         val latency = (System.currentTimeMillis() - startTime).coerceAtLeast(1L)
+        NetworkQualityTracker.recordProbeLatency(latency, isLive)
+
         StreamProbeResult(
             stream = stream,
             isLive = isLive,
@@ -146,11 +150,12 @@ object StreamHealthProber {
 
         var bestStream: Stream? = null
         var bestScore: Long = Long.MIN_VALUE
-        val startTime = System.currentTimeMillis()
+        val deadline = System.currentTimeMillis() + timeoutMs
         var receivedCount = 0
+        val currentNetTier = NetworkQualityTracker.currentTier
 
         while (receivedCount < probePool.size) {
-            val remainingMs = timeoutMs - (System.currentTimeMillis() - startTime)
+            val remainingMs = deadline - System.currentTimeMillis()
             if (remainingMs <= 0 && bestStream != null) {
                 break
             }
@@ -161,13 +166,64 @@ object StreamHealthProber {
             receivedCount++
             if (result.isLive && !result.stream.isLowQualitySource && !result.stream.isUncachedStream) {
                 val baseScore = StreamAutoPlaySelector.calculateQualityScore(result.stream)
-                val latencyPenalty = (result.latencyMs * 5L).coerceAtMost(50_000L)
-                val adjustedScore = baseScore - latencyPenalty
-
-                // Instant match check: confirmed cached 4K / 2K / 1080p
                 val res = result.stream.detectResolutionP()
-                val isHighRes = res >= 1080
-                if (result.stream.isConfirmedCached && isHighRes) {
+
+                // Network line quality adaptive scoring
+                val adjustedScore = when (currentNetTier) {
+                    NetworkQualityTier.POOR -> {
+                        // Bad line / high jitter: heavily penalize 4K/2K, reward 720p/1080p, heavily penalize slow response times
+                        val resAdjustment = when {
+                            res >= 2160 -> -60_000L
+                            res >= 1440 -> -30_000L
+                            res >= 1080 -> 5_000L
+                            res >= 720 -> 25_000L
+                            res in 1..480 -> 15_000L
+                            else -> 0L
+                        }
+                        val latencyPenalty = (result.latencyMs * 20L).coerceAtMost(200_000L)
+                        baseScore + resAdjustment - latencyPenalty
+                    }
+                    NetworkQualityTier.MODERATE -> {
+                        val resAdjustment = when {
+                            res >= 2160 -> -20_000L
+                            res >= 1440 -> 0L
+                            res >= 1080 -> 15_000L
+                            res >= 720 -> 10_000L
+                            else -> 0L
+                        }
+                        val latencyPenalty = (result.latencyMs * 10L).coerceAtMost(100_000L)
+                        baseScore + resAdjustment - latencyPenalty
+                    }
+                    NetworkQualityTier.GOOD -> {
+                        val latencyPenalty = (result.latencyMs * 5L).coerceAtMost(50_000L)
+                        baseScore - latencyPenalty
+                    }
+                    NetworkQualityTier.EXCELLENT -> {
+                        val latencyPenalty = (result.latencyMs * 2L).coerceAtMost(20_000L)
+                        baseScore - latencyPenalty
+                    }
+                }
+
+                // Instant match check:
+                // On POOR network, DO NOT instant match 4K! Instant match 720p or fast 1080p.
+                // On MODERATE network, DO NOT instant match 4K! Instant match 1080p, 720p, or 2K.
+                // On GOOD / EXCELLENT network, 4K/2K/1080p instant match when confirmed cached.
+                val canInstantMatch = when (currentNetTier) {
+                    NetworkQualityTier.POOR -> {
+                        result.stream.isConfirmedCached &&
+                            (res == 720 || (res == 1080 && result.latencyMs < 350L))
+                    }
+                    NetworkQualityTier.MODERATE -> {
+                        result.stream.isConfirmedCached &&
+                            (res in 720..1440)
+                    }
+                    NetworkQualityTier.GOOD,
+                    NetworkQualityTier.EXCELLENT -> {
+                        result.stream.isConfirmedCached && res >= 1080
+                    }
+                }
+
+                if (canInstantMatch) {
                     probeJobs.forEach { it.cancel() }
                     return@coroutineScope result.stream
                 }
