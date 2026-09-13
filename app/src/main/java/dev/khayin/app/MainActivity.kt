@@ -520,6 +520,22 @@ class MainActivity : ComponentActivity() {
                         return@Surface
                     }
 
+                    if (dev.khayin.app.features.license.AdminControlRepository.isCurrentVersionUnsupported()) {
+                        dev.khayin.app.features.license.ui.UpdateRequiredOverlay(
+                            currentVersion = BuildConfig.VERSION_NAME,
+                            minVersion = adminConfig.minSupportedVersion,
+                            unsupportedThreshold = adminConfig.unsupportedVersionThreshold,
+                            notice = adminConfig.updateRequiredNotice,
+                            updateUrl = adminConfig.updateDownloadUrl.ifBlank { adminConfig.forceUpdateUrl },
+                            onCheckAgain = {
+                                lifecycleScope.launch {
+                                    dev.khayin.app.features.license.AdminControlRepository.fetchConfig()
+                                }
+                            }
+                        )
+                        return@Surface
+                    }
+
                     if (licenseState is dev.khayin.app.features.license.LicenseState.Loading) {
                         Box(
                             modifier = Modifier

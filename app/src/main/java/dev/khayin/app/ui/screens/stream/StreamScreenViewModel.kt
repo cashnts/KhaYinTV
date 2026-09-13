@@ -17,6 +17,11 @@ import dev.khayin.app.core.torrent.TorrentService
 import dev.khayin.app.core.torrent.TorrentState
 import dev.khayin.app.core.player.StreamAutoPlayPolicy
 import dev.khayin.app.core.player.StreamAutoPlaySelector
+import dev.khayin.app.core.player.StreamHealthProber
+import dev.khayin.app.domain.model.isConfirmedCached
+import dev.khayin.app.domain.model.isLowQualitySource
+import dev.khayin.app.domain.model.isUncachedStream
+import dev.khayin.app.domain.model.seedersCount
 import dev.khayin.app.core.tracking.TrackingMediaKind
 import dev.khayin.app.core.tracking.TrackingMediaReference
 import dev.khayin.app.core.tracking.TrackingScrobbleAction
@@ -272,6 +277,7 @@ class StreamScreenViewModel @Inject constructor(
                     )
                 }
             }
+            is StreamScreenEvent.OnSkipAutoPlayStream -> skipAutoPlayStream(event.stream)
             StreamScreenEvent.OnRefresh -> {
                 updateUiStateIfChanged {
                     it.copy(
@@ -297,6 +303,27 @@ class StreamScreenViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    fun skipAutoPlayStream(stream: Stream): Boolean {
+        var hasNext = false
+        val current = _uiState.value
+        val failedIndex = current.autoPlayCandidates.indexOf(stream)
+        val remaining = if (failedIndex >= 0) {
+            current.autoPlayCandidates.drop(failedIndex + 1)
+        } else {
+            current.autoPlayCandidates.drop(1)
+        }
+        hasNext = remaining.isNotEmpty()
+        updateUiStateIfChanged {
+            it.copy(
+                autoPlayStream = remaining.firstOrNull(),
+                autoPlayCandidates = remaining,
+                isDirectAutoPlayFlow = remaining.isNotEmpty(),
+                showDirectAutoPlayOverlay = remaining.isNotEmpty(),
+            )
+        }
+        return hasNext
     }
 
     fun cancelStreamsLoad() {
@@ -364,6 +391,8 @@ class StreamScreenViewModel @Inject constructor(
 
             val directFlowActive = directAutoPlayFlowEnabledForSession
             var resolvedAutoPlayTarget = false
+            var autoSelectTriggered = false
+            var autoSelectProbeJob: Job? = null
 
             if (directFlowActive) {
                 updateUiStateIfChanged {
@@ -454,6 +483,66 @@ class StreamScreenViewModel @Inject constructor(
                 contentId?.let { bingeGroupCacheDataStore.get(it) }
             } else null
 
+            fun tryTriggerAutoSelect(addonStreams: List<AddonStreams>, isAllLoaded: Boolean) {
+                if (autoSelectTriggered || resolvedAutoPlayTarget || autoPlayHandledForSession) return
+
+                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(addonStreams, installedAddonOrder)
+                val allStreams = orderedStreams.flatMap { it.streams }
+                if (allStreams.isEmpty()) return
+
+                val evaluation = StreamAutoPlaySelector.evaluateAutoPlayStream(
+                    streams = allStreams,
+                    mode = playerSettings.streamAutoPlayMode,
+                    regexPattern = playerSettings.streamAutoPlayRegex,
+                    source = playerSettings.streamAutoPlaySource,
+                    installedAddonNames = installedAddonOrder.toSet(),
+                    selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
+                    selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins,
+                    preferredBingeGroup = persistedBingeGroup,
+                    preferBingeGroupInSelection = persistedBingeGroup != null,
+                    bingeGroupOnly = false
+                )
+
+                val directCandidates = evaluation.readyStreams.filter {
+                    !it.isUncachedStream &&
+                        !it.isLowQualitySource &&
+                        (it.isConfirmedCached || it.getStreamUrl() != null || it.isDirectDebrid() || (it.seedersCount ?: 0) >= 5)
+                }
+
+                if (directCandidates.isNotEmpty() || isAllLoaded) {
+                    val candidatePool = if (directCandidates.isNotEmpty()) {
+                        directCandidates
+                    } else {
+                        val cachedOrGood = evaluation.readyStreams.filter { !it.isUncachedStream && !it.isLowQualitySource }
+                        if (cachedOrGood.isNotEmpty()) cachedOrGood else evaluation.readyStreams.ifEmpty { allStreams }
+                    }
+
+                    if (candidatePool.isEmpty()) return
+                    autoSelectTriggered = true
+                    resolvedAutoPlayTarget = true
+
+                    autoSelectProbeJob?.cancel()
+                    autoSelectProbeJob = viewModelScope.launch {
+                        val fastestStream = StreamHealthProber.findFastestLivingStream(candidatePool, timeoutMs = 800L)
+                            ?: candidatePool.firstOrNull()
+
+                        if (fastestStream != null) {
+                            updateUiStateIfChanged {
+                                it.copy(
+                                    autoPlayStream = fastestStream,
+                                    autoPlayCandidates = candidatePool,
+                                    showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession || it.autoPlayPlaybackInfo != null) {
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             fun applySuccess(addonStreamGroups: List<AddonStreams>, isAllLoaded: Boolean) {
                 val isMovieContent = contentType.equals("movie", ignoreCase = true) ||
                     (season == null && episode == null && !contentType.equals("series", ignoreCase = true))
@@ -491,29 +580,8 @@ class StreamScreenViewModel @Inject constructor(
 
                 val allStreams = mergedAddonStreams.flatMap { it.streams }
                 val availableAddons = mergedAddonStreams.map { it.addonName }
-                // Auto-select only after all addons have responded or the
-                // configured timeout has elapsed. This gives slower addons a
-                // chance to return higher-quality streams before the selector
-                // picks from whatever is available.
-                val shouldAutoSelect = !autoPlayHandledForSession && !resolvedAutoPlayTarget && isAllLoaded
-                val selectedAutoPlayStream = if (!shouldAutoSelect) {
-                    null
-                } else {
-                    StreamAutoPlaySelector.selectAutoPlayStream(
-                        streams = allStreams,
-                        mode = playerSettings.streamAutoPlayMode,
-                        regexPattern = playerSettings.streamAutoPlayRegex,
-                        source = playerSettings.streamAutoPlaySource,
-                        installedAddonNames = installedAddonOrder.toSet(),
-                        selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
-                        selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins,
-                        preferredBingeGroup = persistedBingeGroup,
-                        preferBingeGroupInSelection = persistedBingeGroup != null
-                    )
-                }
-                if (selectedAutoPlayStream != null) {
-                    resolvedAutoPlayTarget = true
-                }
+
+                tryTriggerAutoSelect(mergedAddonStreams, isAllLoaded = isAllLoaded)
 
                 val currentFilter = _uiState.value.selectedAddonFilter
                 val filteredStreams = if (currentFilter == null) {
@@ -533,12 +601,7 @@ class StreamScreenViewModel @Inject constructor(
                             existing = _uiState.value.sourceChips,
                             succeededNames = mergedAddonStreams.map { it.addonName }
                         ),
-                        // Preserve an already-resolved stream: the post-collect
-                        // "isAllLoaded=true" pass re-runs the selector with
-                        // shouldAutoSelect=false once a target is resolved, and
-                        // would otherwise clobber the real pick with null before
-                        // Compose observes it.
-                        autoPlayStream = selectedAutoPlayStream ?: it.autoPlayStream,
+                        autoPlayStream = it.autoPlayStream,
                         error = null,
                         showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession || it.autoPlayPlaybackInfo != null) {
                             true
@@ -584,7 +647,6 @@ class StreamScreenViewModel @Inject constructor(
             )
 
             var lastSuccessData: List<AddonStreams>? = null
-            var autoSelectTriggered = false
             var timeoutElapsed = false
             var debridPreparationLaunched = false
             val isUnlimitedTimeout = playerSettings.streamAutoPlayTimeoutSeconds == PlayerSettings.STREAM_AUTOPLAY_TIMEOUT_UNLIMITED
@@ -648,17 +710,9 @@ class StreamScreenViewModel @Inject constructor(
                             if (autoSelectTriggered || resolvedAutoPlayTarget || autoPlayHandledForSession) {
                                 // Already resolved — nothing more to do.
                             } else if (timeoutElapsed) {
-                                // Timeout elapsed: run full auto-select (binge
-                                // group preferred, then fallback to mode).
+                                // Timeout elapsed: run full auto-select
                                 applySuccess(result.data, isAllLoaded = true)
-                                if (resolvedAutoPlayTarget) {
-                                    autoSelectTriggered = true
-                                } else if (directAutoPlayFlowEnabledForSession && !isUnlimitedTimeout) {
-                                    // Bounded/instant timeout: no match found.
-                                    // If there are still torrents with a pending
-                                    // debrid cache check, wait for the next emission
-                                    // (which will carry the CACHED/NOT_CACHED result)
-                                    // instead of showing the picker immediately.
+                                if (directAutoPlayFlowEnabledForSession && !isUnlimitedTimeout && !resolvedAutoPlayTarget) {
                                     val hasCheckingTorrents = result.data.any { group ->
                                         group.streams.any { s ->
                                             s.isTorrent() && s.debridCacheStatus?.state == dev.khayin.app.domain.model.StreamDebridCacheState.CHECKING
@@ -674,37 +728,6 @@ class StreamScreenViewModel @Inject constructor(
                                                 directAutoPlayMessage = null
                                             )
                                         }
-                                    }
-                                }
-                            } else if (directFlowActive && persistedBingeGroup != null) {
-                                // Before timeout: eagerly check binge group only
-                                // (no fallback to FIRST_STREAM/REGEX yet). If a
-                                // match is found we can start playback immediately
-                                // without waiting for the full timeout.
-                                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(
-                                    result.data, installedAddonOrder
-                                )
-                                val allStreams = orderedStreams.flatMap { it.streams }
-                                val earlyMatch = StreamAutoPlaySelector.selectAutoPlayStream(
-                                    streams = allStreams,
-                                    mode = playerSettings.streamAutoPlayMode,
-                                    regexPattern = playerSettings.streamAutoPlayRegex,
-                                    source = playerSettings.streamAutoPlaySource,
-                                    installedAddonNames = installedAddonOrder.toSet(),
-                                    selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
-                                    selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins,
-                                    preferredBingeGroup = persistedBingeGroup,
-                                    preferBingeGroupInSelection = true,
-                                    bingeGroupOnly = true
-                                )
-                                if (earlyMatch != null) {
-                                    resolvedAutoPlayTarget = true
-                                    autoSelectTriggered = true
-                                    updateUiStateIfChanged {
-                                        it.copy(
-                                            autoPlayStream = earlyMatch,
-                                            showDirectAutoPlayOverlay = true
-                                        )
                                     }
                                 }
                             }

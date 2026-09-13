@@ -42,6 +42,9 @@ data class SystemServiceConfig(
     val presetAddons: List<String> = emptyList(),
     val disabledAddons: List<String> = emptyList(),
     val minSupportedVersion: String = "",
+    val unsupportedVersionThreshold: String = "",
+    val updateRequiredNotice: String = "",
+    val updateDownloadUrl: String = "",
     val forceUpdateUrl: String = "",
     val dynamicConfig: Map<String, String> = emptyMap(),
 )

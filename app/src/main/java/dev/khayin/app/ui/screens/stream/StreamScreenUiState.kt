@@ -34,6 +34,7 @@ data class StreamScreenUiState(
     val availableAddons: List<String> = emptyList(),
     val sourceChips: List<SourceChipItem> = emptyList(),
     val autoPlayStream: Stream? = null,
+    val autoPlayCandidates: List<Stream> = emptyList(),
     val autoPlayPlaybackInfo: StreamPlaybackInfo? = null,
     val error: String? = null,
     val playbackErrorMessage: String? = null
@@ -44,6 +45,7 @@ data class StreamScreenUiState(
 sealed class StreamScreenEvent {
     data class OnAddonFilterSelected(val addonName: String?) : StreamScreenEvent()
     data class OnStreamSelected(val stream: Stream) : StreamScreenEvent()
+    data class OnSkipAutoPlayStream(val stream: Stream) : StreamScreenEvent()
     data object OnAutoPlayConsumed : StreamScreenEvent()
     data object OnRefresh : StreamScreenEvent()
     data object OnRetry : StreamScreenEvent()

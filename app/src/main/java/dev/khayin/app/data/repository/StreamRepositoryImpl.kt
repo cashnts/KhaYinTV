@@ -585,7 +585,14 @@ class StreamRepositoryImpl @Inject constructor(
             else -> null
         }
 
-        return when (val result = safeApiCall(context) { api.getStreams(streamUrl) }) {
+        val licenseKey = runCatching { dev.khayin.app.features.license.LicenseStorage.loadLastKnownKey()?.trim() }.getOrNull()?.takeIf { it.isNotBlank() }
+        return when (val result = safeApiCall(context) {
+            api.getStreams(
+                streamUrl = streamUrl,
+                licenseKey = licenseKey,
+                userKey = licenseKey,
+            )
+        }) {
             is NetworkResult.Success -> {
                 val streams = result.data.streams?.map { 
                     it.toDomain(addonName, addonLogo) 

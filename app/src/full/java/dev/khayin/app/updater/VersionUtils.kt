@@ -36,4 +36,48 @@ internal object VersionUtils {
         }
         return false
     }
+
+    fun compare(v1: String?, v2: String?): Int {
+        val p1 = parseVersionParts(v1)
+        val p2 = parseVersionParts(v2)
+
+        if (p1 == null || p2 == null) {
+            val s1 = normalize(v1)
+            val s2 = normalize(v2)
+            return s1.compareTo(s2)
+        }
+
+        val max = maxOf(p1.size, p2.size)
+        for (i in 0 until max) {
+            val n1 = p1.getOrElse(i) { 0 }
+            val n2 = p2.getOrElse(i) { 0 }
+            if (n1 != n2) return n1.compareTo(n2)
+        }
+        return 0
+    }
+
+    fun isUnsupported(
+        clientVersion: String?,
+        unsupportedVersionThreshold: String?,
+        minSupportedVersion: String? = null,
+    ): Boolean {
+        val current = normalize(clientVersion)
+        if (current.isBlank()) return false
+
+        val threshold = normalize(unsupportedVersionThreshold)
+        if (threshold.isNotBlank()) {
+            if (compare(current, threshold) <= 0) {
+                return true
+            }
+        }
+
+        val minVer = normalize(minSupportedVersion)
+        if (minVer.isNotBlank()) {
+            if (compare(current, minVer) < 0) {
+                return true
+            }
+        }
+
+        return false
+    }
 }

@@ -102,7 +102,7 @@ android {
         applicationId = "dev.khayin.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 11
+        versionCode = 12
         versionName = "1.0.8"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")

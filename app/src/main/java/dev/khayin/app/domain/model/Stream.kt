@@ -322,3 +322,78 @@ data class AddonStreams(
 
 private fun String?.isMagnetLink(): Boolean =
     this?.trimStart()?.startsWith("magnet:", ignoreCase = true) == true
+
+val Stream.isUncachedStream: Boolean
+    get() {
+        if (debridCacheStatus?.state == StreamDebridCacheState.NOT_CACHED) return true
+        val checkTexts = listOfNotNull(name, title, description)
+        return checkTexts.any { text ->
+            text.contains("uncached", ignoreCase = true) ||
+                text.contains("not cached", ignoreCase = true) ||
+                text.contains("not_cached", ignoreCase = true) ||
+                text.contains("non-cached", ignoreCase = true) ||
+                text.contains("[download]", ignoreCase = true) ||
+                text.contains("(download)", ignoreCase = true) ||
+                text.contains("downloading", ignoreCase = true) ||
+                text.contains("[dl]", ignoreCase = true) ||
+                text.contains("⏳") ||
+                text.contains("❌") ||
+                text.contains("caching in progress", ignoreCase = true) ||
+                text.contains("[rd download]", ignoreCase = true) ||
+                text.contains("[ad download]", ignoreCase = true) ||
+                text.contains("[tb download]", ignoreCase = true) ||
+                text.contains("[pm download]", ignoreCase = true) ||
+                Regex("""(?i)\[(?:rd|ad|pm|tb|torbox|dl|debrid)\](?!\+)""").containsMatchIn(text)
+        }
+    }
+
+val Stream.isConfirmedCached: Boolean
+    get() {
+        if (isUncachedStream) return false
+        if (isDirectDebrid() || debridCacheStatus?.state == StreamDebridCacheState.CACHED) return true
+        val checkTexts = listOfNotNull(name, title, description)
+        return checkTexts.any { text ->
+            text.contains("[rd+]", ignoreCase = true) ||
+                text.contains("[rd +]", ignoreCase = true) ||
+                text.contains("[ad+]", ignoreCase = true) ||
+                text.contains("[ad +]", ignoreCase = true) ||
+                text.contains("[pm+]", ignoreCase = true) ||
+                text.contains("[tb+]", ignoreCase = true) ||
+                text.contains("[dl+]", ignoreCase = true) ||
+                text.contains("[torbox+]", ignoreCase = true) ||
+                text.contains("[debrid+]", ignoreCase = true) ||
+                text.contains("[realdebrid+]", ignoreCase = true) ||
+                text.contains("[alldebrid+]", ignoreCase = true) ||
+                text.contains("[premiumize+]", ignoreCase = true) ||
+                text.contains("[cached]", ignoreCase = true) ||
+                text.contains("(cached)", ignoreCase = true) ||
+                text.contains("⚡") ||
+                text.contains("instant", ignoreCase = true) ||
+                text.contains("[ready]", ignoreCase = true) ||
+                text.contains("(ready)", ignoreCase = true)
+        }
+    }
+
+val Stream.seedersCount: Int?
+    get() {
+        val check = listOfNotNull(name, title, description).joinToString("\n")
+        Regex("[👤👥]\\s*([0-9]+)").find(check)?.groupValues?.get(1)?.toIntOrNull()?.let { return it }
+        Regex("(?i)\\b([0-9]+)\\s*(?:seeds|seeders|seeder)\\b").find(check)?.groupValues?.get(1)?.toIntOrNull()?.let { return it }
+        Regex("(?i)\\b(?:seeds|seeders|seeder)\\s*[:=]\\s*([0-9]+)\\b").find(check)?.groupValues?.get(1)?.toIntOrNull()?.let { return it }
+        Regex("\\[([0-9]+)/[0-9]+\\]").find(check)?.groupValues?.get(1)?.toIntOrNull()?.let { return it }
+        return null
+    }
+
+val Stream.isLowQualitySource: Boolean
+    get() {
+        val check = listOfNotNull(name, title, description, behaviorHints?.filename).joinToString(" ").lowercase()
+        if (listOf("camrip", "hdcam", "telesync", "hdts", "screener", "dvdscr", "cam-rip", "ts-rip", "hdtc", "r5").any { check.contains(it) }) {
+            return true
+        }
+        val seeds = seedersCount
+        if (seeds != null && seeds < 3 && !isConfirmedCached && getStreamUrl() == null) {
+            return true
+        }
+        return false
+    }
+

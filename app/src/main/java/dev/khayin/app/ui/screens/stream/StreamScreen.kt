@@ -280,7 +280,9 @@ fun StreamScreen(
         }
         val playbackInfo = viewModel.resolveStreamForPlayback(stream)
         if (playbackInfo == null) {
-            viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+            if (!viewModel.skipAutoPlayStream(stream)) {
+                viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+            }
             return@LaunchedEffect
         }
         // Torrent streams have url == null but carry an infoHash; navigation

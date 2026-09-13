@@ -6,6 +6,7 @@ import dev.khayin.app.data.remote.dto.MetaResponseDto
 import dev.khayin.app.data.remote.dto.StreamResponseDto
 import dev.khayin.app.data.remote.dto.SubtitleResponseDto
 import retrofit2.Response
+import retrofit2.http.Header
 import retrofit2.http.GET
 import retrofit2.http.Url
 
@@ -21,7 +22,11 @@ interface AddonApi {
     suspend fun getMeta(@Url metaUrl: String): Response<MetaResponseDto>
 
     @GET
-    suspend fun getStreams(@Url streamUrl: String): Response<StreamResponseDto>
+    suspend fun getStreams(
+        @Url streamUrl: String,
+        @Header("X-License-Key") licenseKey: String? = null,
+        @Header("X-User-Key") userKey: String? = null,
+    ): Response<StreamResponseDto>
 
     @GET
     suspend fun getSubtitles(@Url subtitleUrl: String): Response<SubtitleResponseDto>

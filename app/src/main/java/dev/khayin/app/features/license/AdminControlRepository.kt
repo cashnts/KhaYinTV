@@ -52,6 +52,9 @@ data class SystemServiceConfig(
 
     // 5. Version Gating
     val minSupportedVersion: String = "",
+    val unsupportedVersionThreshold: String = "",
+    val updateRequiredNotice: String = "",
+    val updateDownloadUrl: String = "",
     val forceUpdateUrl: String = "",
 
     // 6. Extensible Live Key-Value Parameters
@@ -114,13 +117,70 @@ object AdminControlRepository {
         }
     }
 
+    fun isCurrentVersionUnsupported(): Boolean {
+        return isVersionUnsupported(BuildConfig.VERSION_NAME)
+    }
+
+    fun isVersionUnsupported(clientVersion: String?): Boolean {
+        val current = normalizeVersion(clientVersion)
+        if (current.isBlank()) return false
+
+        val cfg = _config.value
+        val threshold = normalizeVersion(cfg.unsupportedVersionThreshold)
+        if (threshold.isNotBlank()) {
+            if (compareVersions(current, threshold) <= 0) {
+                return true
+            }
+        }
+
+        val minVer = normalizeVersion(cfg.minSupportedVersion)
+        if (minVer.isNotBlank()) {
+            if (compareVersions(current, minVer) < 0) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private fun normalizeVersion(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        return raw.trim().removePrefix("v").removePrefix("V").trim()
+    }
+
+    private fun parseVersionParts(raw: String?): List<Int>? {
+        val normalized = normalizeVersion(raw)
+        if (normalized.isBlank()) return null
+        val parts = normalized.split('.', '-', '_')
+            .filter { it.isNotBlank() }
+            .mapNotNull { token -> token.takeWhile { it.isDigit() }.toIntOrNull() }
+        return parts.takeIf { it.isNotEmpty() }
+    }
+
+    private fun compareVersions(v1: String?, v2: String?): Int {
+        val p1 = parseVersionParts(v1)
+        val p2 = parseVersionParts(v2)
+        if (p1 == null || p2 == null) {
+            val s1 = normalizeVersion(v1)
+            val s2 = normalizeVersion(v2)
+            return s1.compareTo(s2)
+        }
+        val max = maxOf(p1.size, p2.size)
+        for (i in 0 until max) {
+            val n1 = p1.getOrElse(i) { 0 }
+            val n2 = p2.getOrElse(i) { 0 }
+            if (n1 != n2) return n1.compareTo(n2)
+        }
+        return 0
+    }
+
     fun startPolling() {
         refreshDismissedTimestamp()
         if (pollingJob != null) return
         pollingJob = scope.launch {
             fetchConfig()
             while (true) {
-                delay(15 * 60 * 1000L) // Poll remote service config every 15 mins
+                delay(45 * 1000L) // Poll remote service config every 45s for responsive controls
                 fetchConfig()
             }
         }

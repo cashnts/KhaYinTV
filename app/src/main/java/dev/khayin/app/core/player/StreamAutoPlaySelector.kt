@@ -6,6 +6,9 @@ import dev.khayin.app.data.local.StreamAutoPlaySource
 import dev.khayin.app.domain.model.AddonStreams
 import dev.khayin.app.domain.model.Stream
 import dev.khayin.app.domain.model.StreamDebridCacheState
+import dev.khayin.app.domain.model.isConfirmedCached
+import dev.khayin.app.domain.model.isLowQualitySource
+import dev.khayin.app.domain.model.isUncachedStream
 
 object StreamAutoPlaySelector {
     fun orderAddonStreams(
@@ -56,8 +59,32 @@ object StreamAutoPlaySelector {
         preferredBingeGroup: String? = null,
         preferBingeGroupInSelection: Boolean = false,
         bingeGroupOnly: Boolean = false
-    ): Stream? {
-        if (streams.isEmpty()) return null
+    ): Stream? = evaluateAutoPlayStream(
+        streams = streams,
+        mode = mode,
+        regexPattern = regexPattern,
+        source = source,
+        installedAddonNames = installedAddonNames,
+        selectedAddons = selectedAddons,
+        selectedPlugins = selectedPlugins,
+        preferredBingeGroup = preferredBingeGroup,
+        preferBingeGroupInSelection = preferBingeGroupInSelection,
+        bingeGroupOnly = bingeGroupOnly
+    ).stream
+
+    fun evaluateAutoPlayStream(
+        streams: List<Stream>,
+        mode: StreamAutoPlayMode,
+        regexPattern: String,
+        source: StreamAutoPlaySource,
+        installedAddonNames: Set<String>,
+        selectedAddons: Set<String>,
+        selectedPlugins: Set<String>,
+        preferredBingeGroup: String? = null,
+        preferBingeGroupInSelection: Boolean = false,
+        bingeGroupOnly: Boolean = false
+    ): StreamAutoPlayEvaluation {
+        if (streams.isEmpty()) return StreamAutoPlayEvaluation()
 
         val effectiveSource = if (!AppFeaturePolicy.pluginsEnabled && source == StreamAutoPlaySource.ENABLED_PLUGINS_ONLY) {
             StreamAutoPlaySource.INSTALLED_ADDONS_ONLY
@@ -78,39 +105,48 @@ object StreamAutoPlaySelector {
                 selectedPlugins.isEmpty() || stream.addonName in selectedPlugins
             }
         }
-        if (candidateStreams.isEmpty()) return null
+        if (candidateStreams.isEmpty()) return StreamAutoPlayEvaluation()
 
-        // Binge group matching takes priority over mode — even in MANUAL mode,
-        // a persisted binge group should auto-play without showing the picker.
         val targetBingeGroup = preferredBingeGroup?.trim().orEmpty()
-        if (preferBingeGroupInSelection && targetBingeGroup.isNotEmpty()) {
-            val bingeGroupMatch = candidateStreams.firstOrNull { stream ->
-                stream.behaviorHints?.bingeGroup == targetBingeGroup && isPlayable(stream)
-            }
-            if (bingeGroupMatch != null) return bingeGroupMatch
-            // When bingeGroupOnly is set (MANUAL mode with only binge-group
-            // preference enabled), don't fall back to a non-matching stream —
-            // return null so the caller shows the stream picker instead.
-            if (bingeGroupOnly) return null
+        val bingeGroupCandidates = if (preferBingeGroupInSelection && targetBingeGroup.isNotEmpty()) {
+            candidateStreams.filter { stream -> stream.behaviorHints?.bingeGroup == targetBingeGroup }
+        } else {
+            emptyList()
+        }
+        val preferredReadyStream = bingeGroupCandidates.firstOrNull { isPlayable(it) }
+
+        if (bingeGroupOnly) {
+            val readyStreams = listOfNotNull(preferredReadyStream)
+            return StreamAutoPlayEvaluation(
+                stream = preferredReadyStream,
+                readyStreams = readyStreams,
+                hasPendingDebridCandidate = preferredReadyStream == null &&
+                    bingeGroupCandidates.any { it.isTorrent() && it.debridCacheStatus?.state == StreamDebridCacheState.CHECKING }
+            )
         }
 
-        if (bingeGroupOnly) return null
+        if (mode == StreamAutoPlayMode.MANUAL) {
+            return if (preferredReadyStream != null) {
+                StreamAutoPlayEvaluation(
+                    stream = preferredReadyStream,
+                    readyStreams = listOf(preferredReadyStream)
+                )
+            } else {
+                StreamAutoPlayEvaluation()
+            }
+        }
 
-        if (mode == StreamAutoPlayMode.MANUAL) return null
+        val preferredStream = preferredReadyStream
 
-        return when (mode) {
-            StreamAutoPlayMode.MANUAL -> null
-            StreamAutoPlayMode.FIRST_STREAM -> candidateStreams.filter { isPlayable(it) }.maxByOrNull { calculateQualityScore(it) }
+        val matchingStreams = when (mode) {
+            StreamAutoPlayMode.MANUAL -> emptyList()
+            StreamAutoPlayMode.FIRST_STREAM -> candidateStreams
             StreamAutoPlayMode.REGEX_MATCH -> {
                 val pattern = regexPattern.trim()
- 
-                // Try to compile the user regex
                 val userRegex = runCatching { Regex(pattern, RegexOption.IGNORE_CASE) }.getOrNull()
-                if (userRegex == null) return null
+                    ?: return StreamAutoPlayEvaluation()
 
-                // Auto-extract exclusion patterns from negative lookaheads
                 val exclusionMatches = Regex("\\(\\?![^)]*?\\(([^)]+)\\)").findAll(pattern)
-
                 val exclusionWords = exclusionMatches
                     .flatMap { match -> match.groupValues[1].split("|") }
                     .map { it.trim() }
@@ -121,10 +157,7 @@ object StreamAutoPlaySelector {
                     Regex("\\b(${exclusionWords.joinToString("|")})\\b", RegexOption.IGNORE_CASE)
                 } else null
 
-                // 1. Build list of ALL regex‑matching streams
-                val matchingStreams = candidateStreams.filter { stream ->
-                    if (!isPlayable(stream)) return@filter false
-
+                candidateStreams.filter { stream ->
                     val searchableText = buildString {
                         append(stream.addonName).append(' ')
                         append(stream.name.orEmpty()).append(' ')
@@ -134,21 +167,32 @@ object StreamAutoPlaySelector {
                         if (stream.isTorrent()) append(' ').append(stream.infoHash.orEmpty())
                     }
 
-                    // Must match include pattern
                     if (!userRegex.containsMatchIn(searchableText)) return@filter false
-
-                    // Must NOT match exclusion pattern
                     if (excludeRegex != null && excludeRegex.containsMatchIn(searchableText)) {
                         return@filter false
                     }
-
                     true
                 }
-
-                if (matchingStreams.isEmpty()) return null
-                matchingStreams.maxByOrNull { calculateQualityScore(it) }
             }
         }
+
+        val readyStreams = buildList {
+            preferredStream?.let(::add)
+            val sortedMatching = matchingStreams
+                .filter { isPlayable(it) && !it.isUncachedStream }
+                .filterNot { it == preferredStream }
+                .sortedWith(compareByDescending<Stream> { calculateQualityScore(it) })
+            addAll(sortedMatching)
+        }
+
+        val selected = readyStreams.firstOrNull()
+        return StreamAutoPlayEvaluation(
+            stream = selected,
+            readyStreams = readyStreams,
+            hasPendingDebridCandidate = matchingStreams.any {
+                it.isTorrent() && it.debridCacheStatus?.state == StreamDebridCacheState.CHECKING
+            }
+        )
     }
 
     fun calculateQualityScore(stream: Stream): Long {
@@ -214,3 +258,9 @@ object StreamAutoPlaySelector {
         return score
     }
 }
+
+data class StreamAutoPlayEvaluation(
+    val stream: Stream? = null,
+    val readyStreams: List<Stream> = emptyList(),
+    val hasPendingDebridCandidate: Boolean = false,
+)
