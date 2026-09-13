@@ -309,6 +309,98 @@ object LicenseRepository {
         }
     }
 
+    suspend fun applyApprovedLicense(
+        key: String,
+        customerName: String? = null,
+        tier: String? = null,
+        expiresAt: String? = null
+    ): Result<LicenseInfo> = withContext(Dispatchers.IO) {
+        val safeKey = key.trim().uppercase()
+        if (safeKey.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("License key cannot be empty"))
+        }
+
+        _error.value = null
+        val restUrl = supabaseRestUrl()
+        val apiKey = BuildConfig.SUPABASE_ANON_KEY
+        val deviceId = getOrCreateDeviceId()
+
+        runCatching {
+            var resolvedInfo: LicenseInfo? = null
+
+            // Query Supabase license_keys table to get full metadata (tier, profile, notes, expiration)
+            try {
+                val queryUrl = "$restUrl/license_keys?key=eq.$safeKey&select=*"
+                val qSecHeaders = KhaYinSecurityBridge.buildSecureHeaders("GET", queryUrl, "")
+                val qReq = Request.Builder()
+                    .url(queryUrl)
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", "Bearer $apiKey")
+                    .addHeader("Content-Type", "application/json")
+                qSecHeaders.forEach { (k, v) -> qReq.addHeader(k, v) }
+
+                val qResp = httpClient.newCall(qReq.build()).execute()
+                val qBody = qResp.body?.string().orEmpty()
+
+                if (qResp.isSuccessful && !qBody.startsWith("<")) {
+                    val records = runCatching {
+                        gson.fromJson(qBody, Array<SupabaseLicenseRecord>::class.java)?.toList()
+                    }.getOrNull()
+
+                    if (!records.isNullOrEmpty()) {
+                        resolvedInfo = records.first().toLicenseInfo(fallbackKey = safeKey)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error fetching license metadata from Supabase: ${e.message}")
+            }
+
+            val finalInfo = resolvedInfo ?: LicenseInfo(
+                key = safeKey,
+                status = "active",
+                customerName = customerName,
+                tier = tier ?: "standard",
+                expiresAt = expiresAt,
+                maxDevices = 10,
+                activeDevices = 1
+            )
+
+            if (finalInfo.status.equals("revoked", ignoreCase = true)) {
+                saveSecureLicensePayload(finalInfo)
+                _state.value = LicenseState.Revoked(finalInfo)
+                throw IllegalStateException("This license key has been revoked.")
+            }
+
+            if (isExpiredTimestamp(finalInfo.expiresAt)) {
+                saveSecureLicensePayload(finalInfo)
+                _state.value = LicenseState.Expired(finalInfo)
+                throw IllegalStateException("This license key has expired.")
+            }
+
+            saveSecureLicensePayload(finalInfo)
+            LicenseStorage.saveFreeMode(false)
+            _state.value = LicenseState.Active(finalInfo)
+            _error.value = null
+
+            dev.khayin.app.core.analytics.PostHogAnalytics.identify(finalInfo.key, mapOf(
+                "tier" to (finalInfo.tier ?: "standard"),
+                "customer_name" to (finalInfo.customerName ?: ""),
+                "device_id" to deviceId
+            ))
+            dev.khayin.app.core.analytics.PostHogAnalytics.capture("license_activated", mapOf(
+                "license_key" to finalInfo.key,
+                "tier" to (finalInfo.tier ?: "standard"),
+                "expires_at" to (finalInfo.expiresAt ?: ""),
+                "method" to "qr_sync"
+            ))
+
+            finalInfo
+        }.onFailure { e ->
+            Log.e(TAG, "applyApprovedLicense failed: ${e.message}", e)
+            _error.value = e.message
+        }
+    }
+
     suspend fun verifyRemoteLicense(): Unit = withContext(Dispatchers.IO) {
         val currentInfo = (_state.value as? LicenseState.Active)?.info ?: return@withContext
         try {

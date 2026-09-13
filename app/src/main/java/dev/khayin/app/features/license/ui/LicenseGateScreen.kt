@@ -3,6 +3,7 @@
 package dev.khayin.app.features.license.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -24,12 +25,14 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExitToApp
-import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,8 +49,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -63,12 +66,12 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import androidx.compose.material.icons.filled.PlayArrow
 import dev.khayin.app.R
 import dev.khayin.app.features.license.LicenseRepository
-import dev.khayin.app.features.license.LicenseState
+import dev.khayin.app.features.license.qr.QrActivationService
+import dev.khayin.app.features.license.qr.QrActivationUiState
 import dev.khayin.app.ui.components.BrandWordmark
-import dev.khayin.app.ui.theme.NuvioTheme
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 private val GateBackground = Color(0xFF08090C)
@@ -80,51 +83,126 @@ private val TextPrimary = Color(0xFFF0F3F8)
 private val TextSecondary = Color(0xFF8E93A2)
 private val AccentGreen = Color(0xFF00E676)
 
+private fun formatPairingCode(code: String): String {
+    val clean = code.trim()
+    return if (clean.length == 6 && !clean.contains("-")) {
+        "${clean.substring(0, 3)}-${clean.substring(3)}"
+    } else {
+        clean
+    }
+}
+
 @Composable
 fun LicenseGateScreen(
     onExit: () -> Unit,
     onContinueForFree: () -> Unit = {}
 ) {
-    val licenseState by LicenseRepository.state.collectAsState()
-    val repoError by LicenseRepository.error.collectAsState()
-    var keyText by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-    var localError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val inputFocusRequester = remember { FocusRequester() }
-    var isInputFocused by remember { mutableStateOf(false) }
+    var qrState by remember { mutableStateOf<QrActivationUiState>(QrActivationUiState.Loading) }
+    var showManualInput by remember { mutableStateOf(false) }
 
-    BackHandler {
-        onExit()
+    // Manual input state
+    var keyText by remember { mutableStateOf("") }
+    var isManualLoading by remember { mutableStateOf(false) }
+    var manualError by remember { mutableStateOf<String?>(null) }
+    val manualInputFocusRequester = remember { FocusRequester() }
+    var isManualInputFocused by remember { mutableStateOf(false) }
+
+    var listenerJob by remember { mutableStateOf<Job?>(null) }
+
+    fun startQrSession() {
+        listenerJob?.cancel()
+        qrState = QrActivationUiState.Loading
+        scope.launch {
+            QrActivationService.createSession().fold(
+                onSuccess = { sessionResp ->
+                    val sessionId = sessionResp.sessionId ?: return@fold
+                    val pairingCode = sessionResp.pairingCode ?: ""
+                    val activateUrl = sessionResp.activateUrl ?: "https://auth.khayin.net/activate"
+                    val expiresAt = sessionResp.expiresAt ?: (System.currentTimeMillis() + (sessionResp.ttlMs ?: 300000L))
+
+                    val bitmap = QrActivationService.generateQrBitmap(activateUrl)
+
+                    qrState = QrActivationUiState.Active(
+                        sessionId = sessionId,
+                        pairingCode = pairingCode,
+                        activateUrl = activateUrl,
+                        expiresAt = expiresAt,
+                        qrBitmap = bitmap,
+                        isScanned = false
+                    )
+
+                    listenerJob = QrActivationService.listenForApproval(
+                        scope = scope,
+                        sessionId = sessionId,
+                        expiresAt = expiresAt,
+                        onScanned = {
+                            val current = qrState
+                            if (current is QrActivationUiState.Active) {
+                                qrState = current.copy(isScanned = true)
+                            }
+                        },
+                        onApproved = { license ->
+                            qrState = QrActivationUiState.Approved(license)
+                            scope.launch {
+                                LicenseRepository.applyApprovedLicense(
+                                    key = license.key,
+                                    customerName = license.customerName,
+                                    tier = license.tier,
+                                    expiresAt = license.expiresAt
+                                )
+                            }
+                        },
+                        onExpired = {
+                            qrState = QrActivationUiState.Expired
+                        },
+                        onError = { errMsg ->
+                            qrState = QrActivationUiState.Error(errMsg)
+                        }
+                    )
+                },
+                onFailure = { e ->
+                    qrState = QrActivationUiState.Error(e.message ?: "Failed to generate pairing code")
+                }
+            )
+        }
     }
 
     LaunchedEffect(Unit) {
-        inputFocusRequester.requestFocus()
+        startQrSession()
     }
 
-    val displayedError = localError ?: repoError ?: when (licenseState) {
-        is LicenseState.Expired -> "Your license key has expired. Please enter a renewed key."
-        is LicenseState.Revoked -> "This license key has been revoked. Please enter a valid key."
-        else -> null
+    DisposableEffect(Unit) {
+        onDispose {
+            listenerJob?.cancel()
+        }
     }
 
-    fun submitKey() {
+    BackHandler {
+        if (showManualInput) {
+            showManualInput = false
+        } else {
+            onExit()
+        }
+    }
+
+    fun submitManualKey() {
         val trimmed = keyText.trim().uppercase()
         if (trimmed.isBlank()) {
-            localError = "Please enter your license key."
+            manualError = "Please enter your license key."
             return
         }
-        isLoading = true
-        localError = null
+        isManualLoading = true
+        manualError = null
         scope.launch {
             LicenseRepository.activate(trimmed).fold(
                 onSuccess = {
-                    isLoading = false
-                    localError = null
+                    isManualLoading = false
+                    manualError = null
                 },
                 onFailure = { err ->
-                    isLoading = false
-                    localError = err.message ?: "License activation failed. Please check your key."
+                    isManualLoading = false
+                    manualError = err.message ?: "License activation failed. Please check your key."
                 }
             )
         }
@@ -135,7 +213,6 @@ fun LicenseGateScreen(
             .fillMaxSize()
             .background(GateBackground)
             .drawBehind {
-                // Subtle radial ambient glow in the center-top
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
@@ -152,278 +229,195 @@ fun LicenseGateScreen(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 64.dp, vertical = 36.dp),
+                .padding(horizontal = 64.dp, vertical = 40.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left info column
+            // Left Column: Branding, instructions, pairing code, actions
             Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .padding(end = 48.dp),
+                    .weight(1.1f)
+                    .fillMaxHeight(),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.Start
             ) {
                 BrandWordmark(
                     contentDescription = stringResource(R.string.cd_nuvio),
-                    modifier = Modifier.height(56.dp),
+                    modifier = Modifier.height(48.dp),
                     contentScale = ContentScale.Fit
                 )
 
                 Spacer(modifier = Modifier.height(28.dp))
 
+                // Step 1: Open URL
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(AccentGreen.copy(alpha = 0.15f))
-                            .border(1.dp, AccentGreen.copy(alpha = 0.4f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = null,
-                            tint = AccentGreen,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
                     Text(
-                        text = "ACTIVATION REQUIRED",
-                        color = AccentGreen,
-                        fontSize = 13.sp,
+                        text = "1. Open",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextSecondary,
+                        fontSize = 17.sp
+                    )
+                    Text(
+                        text = "auth.khayin.net/activate",
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp
+                        color = AccentGreen,
+                        fontSize = 19.sp
                     )
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
+                // Step 2: Code
                 Text(
-                    text = "Welcome to KhaYin TV",
-                    style = MaterialTheme.typography.displayLarge.copy(
-                        color = TextPrimary,
-                        fontSize = 38.sp,
-                        lineHeight = 44.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    text = "2. Enter Pairing Code:",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = TextSecondary,
+                    fontSize = 17.sp
                 )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                Text(
-                    text = "A valid KhaYin license key is required to unlock streaming access, live media hubs, and multi-device cloud synchronization.",
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        color = TextSecondary,
-                        fontSize = 16.sp,
-                        lineHeight = 24.sp
-                    )
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
+                val currentCode = when (val s = qrState) {
+                    is QrActivationUiState.Active -> formatPairingCode(s.pairingCode)
+                    is QrActivationUiState.Approved -> s.license.key.take(7)
+                    else -> "— — —"
+                }
 
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color.White.copy(alpha = 0.03f))
-                        .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .background(GateCardBackground)
+                        .border(1.dp, GateCardBorder, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
                 ) {
                     Text(
-                        text = "Need a license key? Visit https://stream.khayin.net or contact your administrator.",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = TextSecondary.copy(alpha = 0.85f),
-                            fontSize = 13.sp
-                        )
+                        text = currentCode,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 4.sp,
+                        color = TextPrimary
                     )
                 }
-            }
 
-            // Right form card
-            Box(
-                modifier = Modifier
-                    .width(480.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(GateCardBackground)
-                    .border(1.dp, GateCardBorder, RoundedCornerShape(24.dp))
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.VpnKey,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = AccentGreen
-                        )
-                        Text(
-                            text = "Enter License Key",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            fontSize = 20.sp
-                        )
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Real-time Status Pill
+                val (statusText, dotColor, badgeBg) = when (val s = qrState) {
+                    is QrActivationUiState.Loading -> Triple(
+                        "Connecting to auth server...",
+                        Color(0xFFFFD54F),
+                        Color(0x22FFD54F)
+                    )
+                    is QrActivationUiState.Active -> if (s.isScanned) {
+                        Triple("Phone connected! Complete activation on phone...", Color(0xFF42A5F5), Color(0x2242A5F5))
+                    } else {
+                        Triple("Waiting for code entry...", AccentGreen, Color(0x2200E676))
                     }
-
-                    Text(
-                        text = "Type your license key below and press Activate.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
-                        textAlign = TextAlign.Center
+                    is QrActivationUiState.Approved -> Triple(
+                        "Device approved! Unlocking TV...",
+                        AccentGreen,
+                        Color(0x3300E676)
                     )
+                    is QrActivationUiState.Expired -> Triple(
+                        "Pairing code expired",
+                        Color(0xFFFF5252),
+                        Color(0x22FF5252)
+                    )
+                    is QrActivationUiState.Error -> Triple(
+                        s.message,
+                        Color(0xFFFF5252),
+                        Color(0x22FF5252)
+                    )
+                }
 
-                    // Input Box
-                    BasicTextField(
-                        value = keyText,
-                        onValueChange = {
-                            keyText = it.uppercase()
-                            localError = null
-                        },
-                        singleLine = true,
-                        textStyle = TextStyle(
-                            color = TextPrimary,
-                            fontSize = 16.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center
-                        ),
-                        cursorBrush = SolidColor(AccentGreen),
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Characters,
-                            imeAction = ImeAction.Done
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onDone = { submitKey() }
-                        ),
-                        decorationBox = { innerTextField ->
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(GateInputBackground)
-                                    .border(
-                                        width = if (isInputFocused) 2.dp else 1.dp,
-                                        color = if (isInputFocused) AccentGreen else GateInputBorder,
-                                        shape = RoundedCornerShape(12.dp)
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (keyText.isEmpty()) {
-                                    Text(
-                                        text = "KHAYIN-XXXX-XXXX-XXXX",
-                                        color = TextSecondary.copy(alpha = 0.45f),
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                                innerTextField()
-                            }
-                        },
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(badgeBg)
+                        .padding(horizontal = 14.dp, vertical = 7.dp)
+                ) {
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(inputFocusRequester)
-                            .onFocusChanged { isInputFocused = it.isFocused }
+                            .size(9.dp)
+                            .clip(CircleShape)
+                            .background(dotColor)
                     )
+                    Text(
+                        text = statusText,
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
 
-                    // Error Message
-                    if (!displayedError.isNullOrBlank()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0x22FF5252))
-                                .border(1.dp, Color(0x66FF5252), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                Spacer(modifier = Modifier.height(28.dp))
+
+                // Action Buttons
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = { showManualInput = !showManualInput },
+                        colors = ButtonDefaults.colors(
+                            containerColor = Color.White.copy(alpha = 0.08f),
+                            focusedContainerColor = Color.White,
+                            contentColor = TextPrimary,
+                            focusedContentColor = Color.Black
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
+                            Icon(
+                                imageVector = if (showManualInput) Icons.Default.QrCode else Icons.Default.VpnKey,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = displayedError,
-                                color = Color(0xFFFF6E6E),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
+                                text = if (showManualInput) "Show QR Code" else "Enter Key Manually",
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
+                    if (qrState is QrActivationUiState.Expired || qrState is QrActivationUiState.Error) {
                         Button(
-                            onClick = onExit,
-                            modifier = Modifier.weight(1f),
+                            onClick = { startQrSession() },
                             colors = ButtonDefaults.colors(
-                                containerColor = Color.White.copy(alpha = 0.06f),
+                                containerColor = AccentGreen,
                                 focusedContainerColor = Color.White,
-                                contentColor = TextPrimary,
+                                contentColor = Color.Black,
                                 focusedContentColor = Color.Black
                             ),
                             shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center,
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.ExitToApp,
+                                    imageVector = Icons.Default.Refresh,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text(text = "Exit", fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-
-                        Button(
-                            onClick = { submitKey() },
-                            enabled = !isLoading,
-                            modifier = Modifier.weight(1.5f),
-                            colors = ButtonDefaults.colors(
-                                containerColor = AccentGreen,
-                                focusedContainerColor = Color.White,
-                                contentColor = Color.Black,
-                                focusedContentColor = Color.Black,
-                                disabledContainerColor = AccentGreen.copy(alpha = 0.35f)
-                            ),
-                            shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = if (isLoading) "Validating..." else "Activate",
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Text(text = "Refresh Code", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
 
                     Button(
                         onClick = onContinueForFree,
-                        modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.colors(
                             containerColor = Color.White.copy(alpha = 0.08f),
                             focusedContainerColor = AccentGreen,
@@ -434,16 +428,337 @@ fun LicenseGateScreen(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PlayArrow,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "Continue for Free (with Ads)", fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(text = "Continue for Free (with Ads)", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    Button(
+                        onClick = onExit,
+                        colors = ButtonDefaults.colors(
+                            containerColor = Color.White.copy(alpha = 0.04f),
+                            focusedContainerColor = Color(0xFFFF5252),
+                            contentColor = TextSecondary,
+                            focusedContentColor = Color.White
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ExitToApp,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(text = "Exit", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+
+            // Right Column: QR Code Display OR Manual Input Form
+            Box(
+                modifier = Modifier
+                    .weight(0.9f)
+                    .fillMaxHeight(),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!showManualInput) {
+                    // QR Code Card
+                    Box(
+                        modifier = Modifier
+                            .size(360.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(GateCardBackground)
+                            .border(1.dp, GateCardBorder, RoundedCornerShape(24.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        when (val s = qrState) {
+                            is QrActivationUiState.Loading -> {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = AccentGreen,
+                                        modifier = Modifier.size(44.dp)
+                                    )
+                                    Text(
+                                        text = "Loading QR code...",
+                                        color = TextSecondary,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                            is QrActivationUiState.Active -> {
+                                if (s.qrBitmap != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(310.dp)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(Color.White)
+                                            .padding(10.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Image(
+                                            bitmap = s.qrBitmap.asImageBitmap(),
+                                            contentDescription = "Scan QR to activate",
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                } else {
+                                    CircularProgressIndicator(
+                                        color = AccentGreen,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                }
+                            }
+                            is QrActivationUiState.Approved -> {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = AccentGreen,
+                                        modifier = Modifier.size(54.dp)
+                                    )
+                                    Text(
+                                        text = "Activated!",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 20.sp,
+                                        color = TextPrimary
+                                    )
+                                }
+                            }
+                            is QrActivationUiState.Expired -> {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFF5252),
+                                        modifier = Modifier.size(44.dp)
+                                    )
+                                    Text(
+                                        text = "Pairing code expired",
+                                        color = TextSecondary,
+                                        fontSize = 15.sp
+                                    )
+                                    Button(
+                                        onClick = { startQrSession() },
+                                        colors = ButtonDefaults.colors(
+                                            containerColor = AccentGreen,
+                                            focusedContainerColor = Color.White,
+                                            contentColor = Color.Black,
+                                            focusedContentColor = Color.Black
+                                        ),
+                                        shape = ButtonDefaults.shape(RoundedCornerShape(10.dp))
+                                    ) {
+                                        Text(
+                                            text = "Refresh",
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            is QrActivationUiState.Error -> {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.padding(24.dp)
+                                ) {
+                                    Text(
+                                        text = s.message,
+                                        color = Color(0xFFFF6E6E),
+                                        fontSize = 13.sp,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Button(
+                                        onClick = { startQrSession() },
+                                        colors = ButtonDefaults.colors(
+                                            containerColor = AccentGreen,
+                                            focusedContainerColor = Color.White,
+                                            contentColor = Color.Black,
+                                            focusedContentColor = Color.Black
+                                        ),
+                                        shape = ButtonDefaults.shape(RoundedCornerShape(10.dp))
+                                    ) {
+                                        Text(
+                                            text = "Retry",
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Manual Input Form
+                    Box(
+                        modifier = Modifier
+                            .width(420.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(GateCardBackground)
+                            .border(1.dp, GateCardBorder, RoundedCornerShape(24.dp))
+                            .padding(28.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.VpnKey,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(22.dp),
+                                    tint = AccentGreen
+                                )
+                                Text(
+                                    text = "Enter License Key",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary,
+                                    fontSize = 18.sp
+                                )
+                            }
+
+                            BasicTextField(
+                                value = keyText,
+                                onValueChange = {
+                                    keyText = it.uppercase()
+                                    manualError = null
+                                },
+                                singleLine = true,
+                                textStyle = TextStyle(
+                                    color = TextPrimary,
+                                    fontSize = 15.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
+                                ),
+                                cursorBrush = SolidColor(AccentGreen),
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.Characters,
+                                    imeAction = ImeAction.Done
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onDone = { submitManualKey() }
+                                ),
+                                decorationBox = { innerTextField ->
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(GateInputBackground)
+                                            .border(
+                                                width = if (isManualInputFocused) 2.dp else 1.dp,
+                                                color = if (isManualInputFocused) AccentGreen else GateInputBorder,
+                                                shape = RoundedCornerShape(12.dp)
+                                            )
+                                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (keyText.isEmpty()) {
+                                            Text(
+                                                text = "KHAYIN-XXXX-XXXX-XXXX",
+                                                color = TextSecondary.copy(alpha = 0.45f),
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp,
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                        innerTextField()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(manualInputFocusRequester)
+                                    .onFocusChanged { isManualInputFocused = it.isFocused }
+                            )
+
+                            if (!manualError.isNullOrBlank()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0x22FF5252))
+                                        .border(1.dp, Color(0x66FF5252), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = manualError ?: "",
+                                        color = Color(0xFFFF6E6E),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Button(
+                                    onClick = { showManualInput = false },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.colors(
+                                        containerColor = Color.White.copy(alpha = 0.06f),
+                                        focusedContainerColor = Color.White,
+                                        contentColor = TextPrimary,
+                                        focusedContentColor = Color.Black
+                                    ),
+                                    shape = ButtonDefaults.shape(RoundedCornerShape(10.dp))
+                                ) {
+                                    Text(
+                                        text = "Back to QR",
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    )
+                                }
+
+                                Button(
+                                    onClick = { submitManualKey() },
+                                    enabled = !isManualLoading,
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.colors(
+                                        containerColor = AccentGreen,
+                                        focusedContainerColor = Color.White,
+                                        contentColor = Color.Black,
+                                        focusedContentColor = Color.Black,
+                                        disabledContainerColor = AccentGreen.copy(alpha = 0.35f)
+                                    ),
+                                    shape = ButtonDefaults.shape(RoundedCornerShape(10.dp))
+                                ) {
+                                    Text(
+                                        text = if (isManualLoading) "Activating..." else "Activate",
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }

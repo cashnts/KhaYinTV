@@ -150,7 +150,15 @@ class StreamScreenViewModel @Inject constructor(
             episodeName = episodeName,
             runtime = runtime,
             genres = genres,
-            year = year
+            year = year,
+            isDirectAutoPlayFlow = !manualSelection,
+            showDirectAutoPlayOverlay = !manualSelection,
+            autoPlayDecided = !manualSelection,
+            directAutoPlayMessage = if (!manualSelection) {
+                context.getString(R.string.stream_finding_source)
+            } else {
+                null
+            }
         )
     )
     val uiState: StateFlow<StreamScreenUiState> = _uiState.asStateFlow()
@@ -339,7 +347,7 @@ class StreamScreenViewModel @Inject constructor(
         playerPreference: PlayerPreference,
         streamAutoPlayMode: StreamAutoPlayMode
     ): Boolean {
-        return streamAutoPlayMode != StreamAutoPlayMode.MANUAL
+        return !manualSelection
     }
 
     private fun loadStreams(forceRefresh: Boolean = false) {
@@ -363,9 +371,14 @@ class StreamScreenViewModel @Inject constructor(
                 directAutoPlayFlowEnabledForSession = false
                 autoPlayHandledForSession = true
             } else if (!directAutoPlayModeInitializedForSession) {
+                val autoPlayMode = if (playerSettings.streamAutoPlayMode == StreamAutoPlayMode.MANUAL) {
+                    StreamAutoPlayMode.FIRST_STREAM
+                } else {
+                    playerSettings.streamAutoPlayMode
+                }
                 directAutoPlayFlowEnabledForSession = shouldUseDirectAutoPlayFlow(
                     playerPreference = playerSettings.playerPreference,
-                    streamAutoPlayMode = playerSettings.streamAutoPlayMode
+                    streamAutoPlayMode = autoPlayMode
                 )
                 // In MANUAL mode, still enable direct auto-play if a persisted
                 // binge group exists - same behavior as playNextEpisode in the player.
@@ -409,7 +422,12 @@ class StreamScreenViewModel @Inject constructor(
                 }
             } else {
                 updateUiStateIfChanged {
-                    it.copy(autoPlayDecided = true)
+                    it.copy(
+                        isDirectAutoPlayFlow = false,
+                        showDirectAutoPlayOverlay = false,
+                        autoPlayDecided = true,
+                        directAutoPlayMessage = null
+                    )
                 }
             }
 
@@ -490,9 +508,14 @@ class StreamScreenViewModel @Inject constructor(
                 val allStreams = orderedStreams.flatMap { it.streams }
                 if (allStreams.isEmpty()) return
 
+                val autoPlayMode = if (!manualSelection && playerSettings.streamAutoPlayMode == StreamAutoPlayMode.MANUAL) {
+                    StreamAutoPlayMode.FIRST_STREAM
+                } else {
+                    playerSettings.streamAutoPlayMode
+                }
                 val evaluation = StreamAutoPlaySelector.evaluateAutoPlayStream(
                     streams = allStreams,
-                    mode = playerSettings.streamAutoPlayMode,
+                    mode = autoPlayMode,
                     regexPattern = playerSettings.streamAutoPlayRegex,
                     source = playerSettings.streamAutoPlaySource,
                     installedAddonNames = installedAddonOrder.toSet(),
@@ -535,6 +558,11 @@ class StreamScreenViewModel @Inject constructor(
                                         true
                                     } else {
                                         false
+                                    },
+                                    directAutoPlayMessage = if (playerSettings.showPlayerLoadingStatus) {
+                                        context.getString(R.string.debrid_resolving_stream)
+                                    } else {
+                                        null
                                     }
                                 )
                             }
