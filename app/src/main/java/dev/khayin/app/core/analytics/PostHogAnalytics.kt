@@ -157,7 +157,14 @@ object PostHogAnalytics {
                 exProps["\$exception_message"] = throwable?.message ?: message
                 exProps["\$exception_type"] = throwable?.let { it::class.java.name } ?: "ApplicationError"
                 exProps["tag"] = tag
-                exProps["\$exception_handled"] = !level.equals("FATAL", ignoreCase = true)
+                val handled = !level.equals("FATAL", ignoreCase = true)
+                exProps["\$exception_handled"] = handled
+                exProps["\$exception_level"] = if (handled) "error" else "fatal"
+                exProps["\$exception_list"] = if (throwable != null) {
+                    PostHogExceptionList.fromThrowable(throwable, handled)
+                } else {
+                    PostHogExceptionList.synthetic(type = "ApplicationError", message = message, handled = handled)
+                }
                 if (throwable != null) {
                     exProps["\$exception_stack_trace_raw"] = throwable.stackTraceToString().take(6000)
                 }
@@ -188,6 +195,8 @@ object PostHogAnalytics {
             exProps["\$exception_message"] = throwable.message ?: throwable.javaClass.simpleName
             exProps["\$exception_stack_trace_raw"] = throwable.stackTraceToString().take(8000)
             exProps["\$exception_handled"] = !isUnhandled
+            exProps["\$exception_level"] = if (isUnhandled) "fatal" else "error"
+            exProps["\$exception_list"] = PostHogExceptionList.fromThrowable(throwable, handled = !isUnhandled)
             PostHog.capture("\$exception", properties = exProps)
         } catch (e: Exception) {
             Log.w(TAG, "PostHog captureException failed", e)
