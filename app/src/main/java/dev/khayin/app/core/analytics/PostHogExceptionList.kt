@@ -19,12 +19,11 @@ internal object PostHogExceptionList {
         val items = mutableListOf<Map<String, Any>>()
         var current: Throwable? = throwable
         while (current != null && items.size < MAX_EXCEPTIONS && seen.add(current)) {
-            val type = current.javaClass.`package`?.let { current.javaClass.name.removePrefix(it.name + ".") }
-                ?: current.javaClass.name
+            val module = current.javaClass.`package`?.name
             items += buildItem(
-                type = type,
+                type = module?.let { current.javaClass.name.removePrefix("$it.") } ?: current.javaClass.name,
                 value = current.message,
-                module = current.javaClass.`package`?.name,
+                module = module,
                 stackTrace = current.stackTrace,
                 handled = handled,
                 synthetic = false,
