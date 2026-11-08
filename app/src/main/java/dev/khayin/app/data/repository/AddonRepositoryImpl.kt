@@ -50,6 +50,8 @@ class AddonRepositoryImpl @Inject constructor(
         private const val LEGACY_MANIFEST_CACHE_KEY = "manifests"
         private const val MANIFEST_SUFFIX = "/manifest.json"
         private const val MANIFEST_CACHE_TTL_MS = 6 * 60 * 60 * 1000L
+        // Backoff for manifests that failed without an HTTP response (DNS not ready, no route).
+        private val MANIFEST_RETRY_DELAYS_MS = listOf(2_000L, 5_000L, 10_000L, 20_000L)
         const val DEFAULT_CINEMETA_ADDON_URL = "https://v3-cinemeta.strem.io/manifest.json"
         const val DEFAULT_NUVIO_CATALOG_ADDON_URL = "https://catalog.nuvio.tv/manifest.json"
         const val DEFAULT_KHAYIN_STREAM_ADDON_URL = "https://stream.khayin.net/manifest.json"
@@ -112,6 +114,7 @@ class AddonRepositoryImpl @Inject constructor(
     @Volatile
     private var lastManifestRefreshTime = 0L
     private var manifestRefreshJob: Job? = null
+    private var manifestRetryJob: Job? = null
 
     init {
         syncScope.launch { loadManifestCacheFromDisk() }
@@ -135,6 +138,30 @@ class AddonRepositoryImpl @Inject constructor(
             }
         }
     }
+
+    /**
+     * Retries manifests that failed with a transient network error, so an addon that
+     * failed during a launch with no DNS yet appears without an app restart. A success
+     * bumps [manifestCacheRevision], which re-emits [installedAddonsFlow].
+     */
+    private fun scheduleFailedManifestRetry(urls: List<String>) {
+        if (urls.isEmpty() || manifestRetryJob?.isActive == true) return
+        manifestRetryJob = syncScope.launch {
+            var pending = urls
+            for (delayMs in MANIFEST_RETRY_DELAYS_MS) {
+                delay(delayMs)
+                pending = pending.map { url -> async { url to fetchAddon(url) } }
+                    .awaitAll()
+                    .filter { (_, result) -> isTransientFailure(result) }
+                    .map { (url, _) -> url }
+                if (pending.isEmpty()) return@launch
+            }
+            Log.w(TAG, "Manifest retry stopped with ${pending.size} addon(s) still unreachable")
+        }
+    }
+
+    private fun isTransientFailure(result: NetworkResult<Addon>): Boolean =
+        result is NetworkResult.Error && result.code == null
 
     private suspend fun loadManifestCacheFromDisk() = kotlinx.coroutines.withContext(Dispatchers.IO) {
         try {
@@ -199,23 +226,28 @@ class AddonRepositoryImpl @Inject constructor(
                     (enabledByUrl[canonical] ?: true) && getCachedManifest(canonical) == null
                 }
                 if (hasCacheMiss) {
-                    val fresh = coroutineScope {
+                    val results = coroutineScope {
                         urls.map { url ->
                             async {
                                 val canonical = canonicalizeUrl(url)
                                 val enabled = enabledByUrl[canonical] ?: true
                                 if (!enabled) {
-                                    return@async getCachedManifest(canonical)
+                                    return@async (getCachedManifest(canonical)
                                         ?.copy(enabled = false)
-                                        ?: placeholderAddon(canonical, userNames, enabled = false)
+                                        ?: placeholderAddon(canonical, userNames, enabled = false)) to false
                                 }
-                                (getCachedManifest(canonical) ?: when (val result = fetchAddon(url)) {
-                                    is NetworkResult.Success -> result.data
-                                    else -> null
-                                })?.copy(enabled = enabled)
+                                getCachedManifest(canonical)?.let { return@async it.copy(enabled = enabled) to false }
+                                when (val result = fetchAddon(url)) {
+                                    is NetworkResult.Success -> result.data.copy(enabled = enabled) to false
+                                    else -> null to isTransientFailure(result)
+                                }
                             }
-                        }.awaitAll().filterNotNull()
+                        }.awaitAll()
                     }
+                    val fresh = results.mapNotNull { (addon, _) -> addon }
+                    scheduleFailedManifestRetry(
+                        urls.filterIndexed { index, _ -> results[index].second }
+                    )
 
                     if (fresh != cached) {
                         emit(applyDisplayNames(fresh, userNames, enabledByUrl))
