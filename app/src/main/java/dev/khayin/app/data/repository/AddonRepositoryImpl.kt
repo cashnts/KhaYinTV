@@ -231,12 +231,10 @@ class AddonRepositoryImpl @Inject constructor(
                             async {
                                 val canonical = canonicalizeUrl(url)
                                 val enabled = enabledByUrl[canonical] ?: true
-                                if (!enabled) {
-                                    return@async (getCachedManifest(canonical)
-                                        ?.copy(enabled = false)
-                                        ?: placeholderAddon(canonical, userNames, enabled = false)) to false
-                                }
                                 getCachedManifest(canonical)?.let { return@async it.copy(enabled = enabled) to false }
+                                if (!enabled) {
+                                    return@async placeholderAddon(canonical, userNames, enabled = false) to false
+                                }
                                 when (val result = fetchAddon(url)) {
                                     is NetworkResult.Success -> result.data.copy(enabled = enabled) to false
                                     else -> null to isTransientFailure(result)
@@ -246,7 +244,7 @@ class AddonRepositoryImpl @Inject constructor(
                     }
                     val fresh = results.mapNotNull { (addon, _) -> addon }
                     scheduleFailedManifestRetry(
-                        urls.filterIndexed { index, _ -> results[index].second }
+                        urls.zip(results).filter { (_, result) -> result.second }.map { (url, _) -> url }
                     )
 
                     if (fresh != cached) {
